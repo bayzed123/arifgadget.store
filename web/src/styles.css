@@ -215,6 +215,14 @@ h3 { font-size: 1.1rem; }
   color: var(--ink-3);
 }
 
+.eyebrow .bn {
+  /* Bangla conjuncts collapse under uppercase + wide tracking. */
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .muted { color: var(--ink-2); }
 .dim { color: var(--ink-3); }
 .small { font-size: 0.85rem; }
@@ -895,6 +903,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .alert.error { background: var(--bad-soft); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 26%, transparent); }
 .alert.success { background: var(--good-soft); color: var(--good); border-color: color-mix(in srgb, var(--good) 26%, transparent); }
 .alert.warn { background: var(--warn-soft); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 26%, transparent); }
+.alert.info { background: var(--brand-soft); color: var(--ink); border-color: color-mix(in srgb, var(--brand) 26%, transparent); }
+.alert.info em { font-style: normal; font-weight: 800; color: var(--brand-ink, var(--brand)); }
 
 .toast-host {
   position: fixed;
@@ -1513,4 +1523,110 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 
 @media (prefers-reduced-motion: reduce) {
   .offer-backdrop, .offer-modal { animation: none; }
+}
+
+/* ── Bangla guide, customers and the locked footer credits ─────────────── */
+
+.sidebar a.nav-guide {
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.24);
+  color: #fde8c8;
+}
+.sidebar a.nav-guide:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.sidebar a.nav-guide.active {
+  background: linear-gradient(135deg, var(--brand), var(--gold));
+  border-style: solid;
+  color: #0a101e;
+}
+
+.guide-toc {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.guide-toc-item {
+  display: block;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.guide-toc-item:hover { border-color: var(--brand); color: var(--ink); }
+
+.guide-head {
+  width: 100%;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.guide-head h3 { font-size: 1.02rem; }
+
+.guide-body { line-height: 1.78; color: var(--ink-2); }
+.guide-body > * + * { margin-top: 14px; }
+.guide-body h3 {
+  font-size: 0.98rem;
+  color: var(--ink);
+  margin-top: 22px;
+}
+.guide-body ul { padding-left: 1.3em; display: grid; gap: 0.5em; }
+.guide-body li::marker { color: var(--brand); font-weight: 700; }
+.guide-body strong { color: var(--ink); }
+.guide-body em { font-style: normal; font-weight: 700; color: var(--brand-ink, var(--brand)); }
+.guide-body code {
+  background: var(--surface-inset);
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 0.88em;
+}
+.guide-body table.data { font-size: 0.88rem; }
+
+.guide-steps {
+  counter-reset: guide-step;
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.guide-steps li {
+  counter-increment: guide-step;
+  position: relative;
+  padding-left: 38px;
+  min-height: 26px;
+}
+.guide-steps li::before {
+  content: counter(guide-step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand-ink, var(--brand));
+  font-weight: 800;
+  font-size: 0.8rem;
+}
+
+.locked-credits {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  padding: 14px 16px;
+  display: grid;
+  gap: 6px;
+}
+.locked-credits a { color: var(--brand-ink, var(--brand)); font-weight: 600; }
+
+@media print {
+  .sidebar, .admin-head .btn, .guide-toc { display: none; }
+  .guide-body { display: block !important; }
 }

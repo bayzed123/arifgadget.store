@@ -18,6 +18,8 @@ import { Orders } from './pages/admin/Orders';
 import { Inventory } from './pages/admin/Inventory';
 import { Settings } from './pages/admin/Settings';
 import { Content } from './pages/admin/Content';
+import { Customers } from './pages/admin/Customers';
+import { Guide } from './pages/admin/Guide';
 
 // Vite's BASE_URL is "/" on a custom domain and "/<repo>/" on project Pages.
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -49,7 +51,11 @@ export function App() {
                 <Route path="products" element={<Products />} />
                 <Route path="orders" element={<Orders />} />
                 <Route path="inventory" element={<Inventory />} />
+                <Route path="customers" element={<Customers />} />
                 <Route path="content" element={<Content />} />
+                {/* The offer popup deserves its own address — it was too easy to miss as a tab. */}
+                <Route path="offers" element={<Content initialTab="banners" />} />
+                <Route path="guide" element={<Guide />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
 

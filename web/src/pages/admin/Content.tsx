@@ -58,9 +58,37 @@ interface PressRow {
 const BODY_HELP =
   'Formatting: "## Heading", "### Subheading", "- bullet", "1. numbered", **bold**, [link](https://…). Leave a blank line between paragraphs.';
 
-export function Content() {
+/** Header copy per tab, so /admin/offers reads as its own page rather than a sub-tab. */
+const HEADINGS: Record<Tab, { eyebrow: string; title: string; hint: string; action: string }> = {
+  pages: {
+    eyebrow: 'Content',
+    title: 'Pages, blog & press',
+    hint: 'Everything in the footer is edited here. Changes are live as soon as you save.',
+    action: '+ New page',
+  },
+  posts: {
+    eyebrow: 'Content',
+    title: 'Blog posts',
+    hint: 'Write an update for the /blog section. Posts go live the moment you save.',
+    action: '+ New post',
+  },
+  press: {
+    eyebrow: 'Content',
+    title: 'Press coverage',
+    hint: 'Add every news link about the shop. Each one shows with its thumbnail automatically.',
+    action: '+ New press item',
+  },
+  banners: {
+    eyebrow: 'Advertising',
+    title: 'Offer banners & popup',
+    hint: 'The popup that greets shoppers and the offer strip on the homepage are both controlled here.',
+    action: '+ New offer',
+  },
+};
+
+export function Content({ initialTab = 'pages' }: { initialTab?: Tab } = {}) {
   const toast = useToast();
-  const [tab, setTab] = useState<Tab>('pages');
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   const [pages, setPages] = useState<PageRow[]>([]);
   const [posts, setPosts] = useState<PostRow[]>([]);
@@ -181,16 +209,30 @@ export function Content() {
     <>
       <div className="admin-head">
         <div>
-          <span className="eyebrow">Content</span>
-          <h1>Pages, blog &amp; press</h1>
-          <p className="small muted">
-            Everything in the footer is edited here. Changes are live as soon as you save.
-          </p>
+          <span className="eyebrow">
+            {HEADINGS[tab].eyebrow}
+            {tab === 'banners' && (
+              <>
+                {' · '}
+                <span className="bn">বিজ্ঞাপন</span>
+              </>
+            )}
+          </span>
+          <h1>{HEADINGS[tab].title}</h1>
+          <p className="small muted">{HEADINGS[tab].hint}</p>
         </div>
         <button className="btn primary" onClick={() => openEditor(tab)}>
-          + New {tab === 'pages' ? 'page' : tab === 'posts' ? 'post' : tab === 'press' ? 'press item' : 'offer'}
+          {HEADINGS[tab].action}
         </button>
       </div>
+
+      {tab === 'banners' && (
+        <div className="alert info" style={{ marginBottom: 14 }}>
+          <strong>এখান থেকেই পপআপ বিজ্ঞাপন চলে।</strong> নিচের <em>+ New offer</em> বোতামে চাপ দিয়ে নতুন অফার
+          বানান, অথবা যেকোনো সারির <em>Edit</em> চাপ দিয়ে বদলান। <em>Active</em> বন্ধ করলেই বিজ্ঞাপন সাথে সাথে
+          ওয়েবসাইট থেকে উঠে যাবে।
+        </div>
+      )}
 
       <div className="filter-bar">
         <div className="pill-tabs">

@@ -623,11 +623,23 @@ admin.get('/settings', async (c) => {
   return c.json({ settings: results ?? [] });
 });
 
+/**
+ * The footer build credits are fixed. They are part of the agreement under
+ * which the site was built, so no dashboard role — owner included — can edit
+ * them, and the API refuses them rather than silently dropping them.
+ */
+const LOCKED_SETTINGS = new Set(['credit_dev_name', 'credit_dev_url', 'credit_author_name', 'credit_author_url']);
+
 admin.patch('/settings', async (c) => {
   requireOwner(c);
   const body = await readJson(c);
   const entries = Object.entries(body).filter(([, v]) => typeof v === 'string' || typeof v === 'number');
   if (!entries.length) badRequest('Send at least one setting as a string or number');
+
+  const locked = entries.filter(([key]) => LOCKED_SETTINGS.has(key)).map(([key]) => key);
+  if (locked.length) {
+    badRequest(`These settings are fixed and cannot be changed: ${locked.join(', ')}`);
+  }
 
   await c.env.DB.batch(
     entries.map(([key, value]) =>
@@ -640,6 +652,68 @@ admin.patch('/settings', async (c) => {
 
   await audit(c.env, c.get('admin').username, 'settings.update', 'settings', '', entries.map(([k]) => k).join(', '));
   return c.json({ ok: true, updated: entries.length });
+});
+
+/**
+ * Registered shoppers, with the order history rolled up per account so the
+ * dashboard can rank them without a second round trip. Password material is
+ * never selected — there is no dashboard reason to read it.
+ */
+admin.get('/customers', async (c) => {
+  const url = new URL(c.req.url);
+  const q = url.searchParams.get('q')?.trim();
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 50, 1), 200);
+  const page = Math.max(Number(url.searchParams.get('page')) || 1, 1);
+
+  const where: string[] = ['1 = 1'];
+  const binds: unknown[] = [];
+  if (q) {
+    where.push('(c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ? OR c.city LIKE ?)');
+    binds.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+  }
+  const whereSql = where.join(' AND ');
+
+  const totalRow = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM customers c WHERE ${whereSql}`)
+    .bind(...binds)
+    .first<{ n: number }>();
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT c.id, c.name, c.phone, c.email, c.address, c.city, c.created_at, c.last_login_at,
+            (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id) AS orders,
+            (SELECT COALESCE(SUM(o.total),0) FROM orders o
+              WHERE o.customer_id = c.id AND o.counts_as_sale = 1) AS spent,
+            (SELECT MAX(o.created_at) FROM orders o WHERE o.customer_id = c.id) AS last_order_at
+       FROM customers c WHERE ${whereSql}
+      ORDER BY c.created_at DESC LIMIT ? OFFSET ?`,
+  )
+    .bind(...binds, limit, (page - 1) * limit)
+    .all();
+
+  const total = totalRow?.n ?? 0;
+  return c.json({ customers: results ?? [], page, limit, total, pages: Math.ceil(total / limit) });
+});
+
+/** One shopper, with every order they have placed. */
+admin.get('/customers/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const customer = await c.env.DB.prepare(
+    `SELECT id, name, phone, email, address, city, created_at, last_login_at
+       FROM customers WHERE id = ?`,
+  )
+    .bind(id)
+    .first();
+  if (!customer) notFound('Customer not found');
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT o.id, o.order_no, o.status, o.total, o.profit, o.payment_method, o.city, o.created_at,
+            (SELECT COALESCE(SUM(qty),0) FROM order_items WHERE order_id = o.id) AS units
+       FROM orders o WHERE o.customer_id = ?
+      ORDER BY o.created_at DESC LIMIT 100`,
+  )
+    .bind(id)
+    .all();
+
+  return c.json({ customer, orders: results ?? [] });
 });
 
 admin.get('/audit', async (c) => {

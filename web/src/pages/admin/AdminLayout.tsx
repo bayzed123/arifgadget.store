@@ -8,7 +8,9 @@ const NAV = [
   { to: '/admin', end: true, icon: '📊', label: 'Dashboard' },
   { to: '/admin/products', icon: '📦', label: 'Products' },
   { to: '/admin/orders', icon: '🧾', label: 'Orders' },
+  { to: '/admin/customers', icon: '👥', label: 'Customers' },
   { to: '/admin/inventory', icon: '🏷️', label: 'Inventory' },
+  { to: '/admin/offers', icon: '📣', label: 'Offers & popup' },
   { to: '/admin/content', icon: '📝', label: 'Content' },
   { to: '/admin/settings', icon: '⚙️', label: 'Settings' },
 ];
@@ -33,6 +35,15 @@ export function AdminLayout() {
             {item.label}
           </NavLink>
         ))}
+
+        {/* Bangla walkthrough of every screen — deliberately loud, the owner
+            should never have to hunt for the manual. */}
+        <NavLink
+          to="/admin/guide"
+          className={({ isActive }) => `nav-guide ${isActive ? 'active' : ''}`}
+        >
+          <span aria-hidden="true">📖</span> বাংলা গাইড
+        </NavLink>
 
         <div className="spacer" />
 

@@ -380,6 +380,40 @@ async function main() {
   const anonAccount = await api('/api/account/orders');
   check('account routes need a session', anonAccount.status === 401);
 
+  // ------------------------------------------------- customers in the dashboard
+  console.log('\nCustomers in the dashboard');
+  const custList = await api(`/api/admin/customers?q=${phone}`, { auth: true, expect: 200 });
+  const listed = custList.body.customers[0];
+  check('registered shopper appears in the dashboard', Boolean(listed), `${custList.body.total} matched`);
+  check('dashboard shows the name and number', listed?.name === 'Smoke Shopper' && listed?.phone === phone);
+  check('dashboard rolls up their order count', listed?.orders === 1, `orders ${listed?.orders}`);
+  check('password material is never returned', !('password_hash' in (listed ?? {})) && !('salt' in (listed ?? {})));
+
+  const custDetail = await api(`/api/admin/customers/${listed.id}`, { auth: true, expect: 200 });
+  check('customer detail lists their orders', custDetail.body.orders.length === 1);
+  check('customer list needs a staff session', (await api('/api/admin/customers')).status === 401);
+
+  // ------------------------------------------------- footer credits are fixed
+  console.log('\nLocked settings');
+  const lockedTry = await api('/api/admin/settings', {
+    method: 'PATCH', auth: true, body: { credit_dev_name: 'someone else' },
+  });
+  check('footer credit cannot be changed', lockedTry.status === 400, `got ${lockedTry.status}`);
+
+  const mixedTry = await api('/api/admin/settings', {
+    method: 'PATCH', auth: true, body: { store_tagline: 'Wholesale gadgets', credit_author_url: 'https://evil.test' },
+  });
+  check('a locked key poisons the whole save', mixedTry.status === 400, `got ${mixedTry.status}`);
+
+  const stillThere = await api('/api/admin/settings', { auth: true, expect: 200 });
+  const credit = stillThere.body.settings.find((s) => s.key === 'credit_dev_name');
+  check('the credit survived the attempt', credit?.value === 'SmartGen', `value ${credit?.value}`);
+
+  const allowed = await api('/api/admin/settings', {
+    method: 'PATCH', auth: true, body: { store_tagline: 'Wholesale gadgets, priced by the carton' },
+  });
+  check('ordinary settings still save', allowed.status === 200, `got ${allowed.status}`);
+
   report();
 }
 

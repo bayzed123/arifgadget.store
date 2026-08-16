@@ -3,6 +3,10 @@
 Everything you can do from the dashboard, start to finish. No technical
 knowledge needed.
 
+> **বাংলায় পড়তে চাইলে** — ড্যাশবোর্ডে সাইন ইন করে বাঁ পাশের মেনুর
+> **📖 বাংলা গাইড** বোতামে চাপুন, অথবা সরাসরি `/admin/guide` ঠিকানায় যান।
+> পুরো প্যানেলটি সেখানে বাংলায় ব্যাখ্যা করা আছে।
+
 **Contents**
 
 1. [Signing in](#1-signing-in)
@@ -302,6 +306,10 @@ status buttons filter the list.
 
 Enter money in taka — the system stores it precisely behind the scenes.
 
+The **Footer build credits** shown at the bottom of that panel are fixed. They
+are displayed for reference but cannot be edited from the dashboard by any role,
+and the API rejects any attempt to change them.
+
 The **Activity log** beside the settings shows every change any staff member has
 made: products created, prices edited, stock adjusted, orders moved.
 
@@ -335,7 +343,9 @@ becomes a bullet, and `**text**` becomes bold. Nothing else is needed.
 
 ## 12. Offer banners and the popup
 
-**Content → Offers** controls the promotion that greets shoppers.
+**Offers & popup** in the left menu controls the promotion that greets
+shoppers. (It is the same screen as the *Offers* tab under Content — it has its
+own menu entry because it was too easy to miss as a tab.)
 
 Click **+ New offer** and fill in:
 
@@ -388,10 +398,18 @@ account. When somebody registers with a number they have ordered with before,
 their earlier guest orders are attached to the new account automatically, so
 their history is complete from day one.
 
-You do not manage customer accounts from the dashboard, and you never see a
-password — passwords are stored scrambled and cannot be read back by anyone,
-including you. If a customer forgets theirs, they can register again with the
-same number only after you delete the old account; otherwise take the order over
+**Customers** in the left menu lists every registered account: name, mobile
+number, email if they gave one, saved delivery address and city, how many orders
+they have placed, how much they have spent on confirmed orders, when they joined
+and when they last signed in. Click any name to expand that account's full order
+history underneath. The search box matches name, number, email or city — the
+last few digits of a mobile number are enough.
+
+Guests who ordered without an account are not on that page; their orders are in
+**Orders** like any other.
+
+You never see a password — passwords are stored scrambled and cannot be read
+back by anyone, including you. If a customer forgets theirs, take the order over
 the phone as a guest order.
 
 Every product card carries two buttons, so both kinds of shopper are served:
