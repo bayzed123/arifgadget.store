@@ -46,6 +46,7 @@ export function OfferPopup() {
   useEffect(() => {
     if (quiet) return;
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     api<{ banners: Banner[] }>('/api/banners')
       .then((res) => {
@@ -58,13 +59,13 @@ export function OfferPopup() {
 
         setBanner(next);
         // Let the page paint first; an instant modal reads as a popup blocker test.
-        const timer = setTimeout(() => setVisible(true), 1200);
-        return () => clearTimeout(timer);
+        timer = setTimeout(() => setVisible(true), 1200);
       })
       .catch(() => undefined);
 
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [quiet]);
 
