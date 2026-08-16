@@ -1,0 +1,141 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - claude/arif-gadgets-fullstack-fhrjla
+  workflow_dispatch:
+
+# Pages deployment needs these; everything else is read-only.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race on the same D1 database.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  api:
+    name: Worker API
+    runs-on: ubuntu-latest
+    outputs:
+      api_url: ${{ steps.bootstrap.outputs.api_url }}
+    env:
+      # Repository secrets are named CLOUD_FLARE_*; wrangler reads the
+      # CLOUDFLARE_* spellings, so both are exported from the same source and
+      # neither value is ever echoed.
+      CLOUD_FLARE_API: ${{ secrets.CLOUD_FLARE_API }}
+      CLOUD_FLARE_ACCOUNT_ID: ${{ secrets.CLOUD_FLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUD_FLARE_API }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUD_FLARE_ACCOUNT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Creates D1 / R2 / KV on the first run, reuses them afterwards, and
+      # writes the resolved IDs into worker/wrangler.toml.
+      - name: Provision Cloudflare resources
+        id: bootstrap
+        env:
+          API_DOMAIN: ${{ vars.API_DOMAIN }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+          WORKERS_SUBDOMAIN: ${{ vars.WORKERS_SUBDOMAIN }}
+        run: node scripts/bootstrap-cf.mjs
+
+      - name: Apply D1 migrations
+        working-directory: worker
+        run: npx wrangler d1 migrations apply arif-gadgets --remote
+
+      - name: Deploy Worker
+        working-directory: worker
+        run: npx wrangler deploy
+
+      - name: Ensure Worker secrets
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: node scripts/provision-secrets.mjs
+
+      - name: Provision the dashboard owner
+        env:
+          D1_DATABASE_ID: ${{ steps.bootstrap.outputs.database_id }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_NAME: ${{ vars.ADMIN_NAME }}
+        run: node scripts/create-admin.mjs
+
+      - name: Smoke test the deployment
+        run: |
+          URL="${{ steps.bootstrap.outputs.api_url }}"
+          if [ -z "$URL" ]; then echo "No API URL resolved — skipping"; exit 0; fi
+          for i in 1 2 3 4 5; do
+            if curl -fsS "$URL/health" > /tmp/health.json; then
+              cat /tmp/health.json; echo; exit 0
+            fi
+            echo "waiting for the Worker to come up ($i/5)…"; sleep 5
+          done
+          echo "Worker did not answer /health"; exit 1
+
+  web:
+    name: Storefront
+    needs: api
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        env:
+          # A custom domain serves from the root; a project Pages site serves
+          # from /<repo>/, and the router's basename follows Vite's base.
+          VITE_BASE: ${{ vars.CUSTOM_DOMAIN && '/' || format('/{0}/', github.event.repository.name) }}
+          VITE_API_BASE: ${{ needs.api.outputs.api_url }}
+        run: |
+          if [ -z "$VITE_API_BASE" ]; then
+            echo "::error::The API has no public address yet, so the storefront would have nothing to talk to. Set ONE of these repository variables and re-run: API_DOMAIN (e.g. api.arifgadget.store — recommended, wrangler creates the Cloudflare custom domain), WORKERS_SUBDOMAIN (registers your one-time *.workers.dev name), or API_BASE_URL (an address you route yourself). The Worker itself is already deployed and the database is migrated."
+            exit 1
+          fi
+          npm run build --workspace web
+
+      - name: Prepare Pages artifact
+        env:
+          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
+        run: |
+          # Pages serves 404.html for unknown paths; handing it the SPA shell
+          # makes client-side routes survive a hard refresh.
+          cp web/dist/index.html web/dist/404.html
+          touch web/dist/.nojekyll
+          if [ -n "$CUSTOM_DOMAIN" ]; then echo "$CUSTOM_DOMAIN" > web/dist/CNAME; fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+      - id: pages
+        uses: actions/deploy-pages@v4

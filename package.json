@@ -1,0 +1,25 @@
+{
+  "name": "arif-gadgets",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Arif Gadgets — full-stack gadget marketplace on Cloudflare Workers + D1 with a GitHub Pages storefront.",
+  "workspaces": [
+    "worker",
+    "web"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace worker",
+    "dev:web": "npm run dev --workspace web",
+    "build": "npm run build --workspace web",
+    "typecheck": "npm run typecheck --workspace worker && npm run typecheck --workspace web",
+    "bootstrap": "node scripts/bootstrap-cf.mjs",
+    "migrate:remote": "npm run migrate:remote --workspace worker",
+    "deploy:api": "npm run deploy --workspace worker"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

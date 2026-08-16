@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+      - claude/arif-gadgets-fullstack-fhrjla
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck, build and smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build the storefront
+        run: npm run build --workspace web
+
+      # The whole API runs locally under Miniflare, so this exercises the
+      # schema, the triggers and the analytics without touching Cloudflare.
+      - name: Apply migrations to a local D1
+        working-directory: worker
+        run: npx wrangler d1 migrations apply arif-gadgets --local
+
+      - name: Start the Worker
+        working-directory: worker
+        run: |
+          echo "JWT_SECRET=ci-only-secret-$RANDOM$RANDOM" > .dev.vars
+          npx wrangler dev --local --port 8787 --ip 127.0.0.1 > /tmp/wrangler.log 2>&1 &
+          for i in $(seq 1 45); do
+            curl -fsS http://127.0.0.1:8787/health > /dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "Worker never became healthy:"; cat /tmp/wrangler.log; exit 1
+
+      - name: Smoke test
+        run: node scripts/smoke-test.mjs http://127.0.0.1:8787
+
+      - name: Worker logs
+        if: failure()
+        run: cat /tmp/wrangler.log || true
