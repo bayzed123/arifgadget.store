@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from
 import { api } from '../lib/api';
 import { setCurrencySymbol } from '../lib/format';
 import { useCart, useTheme } from '../lib/store';
-import type { Category, StoreSettings } from '../lib/types';
+import type { Category, PageLink, StoreSettings } from '../lib/types';
 import { Logo } from './Logo';
 import { PaymentBadges } from './PaymentBadges';
 import { WhatsAppButton } from './WhatsAppButton';
@@ -13,6 +13,8 @@ import { BottomNav } from './BottomNav';
 export function Layout() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [settings, setSettings] = useState<StoreSettings | null>(null);
+  const [company, setCompany] = useState<PageLink[]>([]);
+  const [policy, setPolicy] = useState<PageLink[]>([]);
   const [theme, setTheme] = useTheme();
   const [params] = useSearchParams();
   const [query, setQuery] = useState(params.get('q') ?? '');
@@ -35,6 +37,16 @@ export function Layout() {
         setCurrencySymbol(res.currency_symbol);
       })
       .catch(() => setSettings(null));
+
+    api<{ company: PageLink[]; policy: PageLink[] }>('/api/pages')
+      .then((res) => {
+        setCompany(res.company);
+        setPolicy(res.policy);
+      })
+      .catch(() => {
+        setCompany([]);
+        setPolicy([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -156,13 +168,54 @@ export function Layout() {
                 Wholesale gadgets shipped factory-direct across Bangladesh. Volume pricing, live stock and a
                 seven-day return window on every carton.
               </p>
+              {settings?.owner_name && (
+                <p className="tiny dim" style={{ marginTop: 8 }}>
+                  Owner: {settings.owner_name}
+                </p>
+              )}
+
+              {settings?.facebook_url && (
+                <div className="social-row">
+                  <a
+                    href={settings.facebook_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Arif Gadgets on Facebook"
+                    title="Follow us on Facebook"
+                  >
+                    <svg viewBox="0 0 24 24" width="19" height="19" fill="#fff" aria-hidden="true">
+                      <path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5.02 3.66 9.19 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.52 1.5-3.91 3.77-3.91 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.78-1.63 1.57v1.89h2.78l-.44 2.91h-2.34V22c4.78-.75 8.44-4.92 8.44-9.94Z" />
+                    </svg>
+                  </a>
+                </div>
+              )}
             </div>
             <div>
-              <h4>Shop</h4>
-              <ul>
-                {categories.slice(0, 5).map((category) => (
-                  <li key={category.id}>
-                    <Link to={`/catalog?category=${category.slug}`}>{category.name}</Link>
+              <h4>About Us</h4>
+              <ul className="footer-links">
+                {company.map((page) => (
+                  <li key={page.slug}>
+                    <Link to={`/page/${page.slug}`}>{page.title}</Link>
+                  </li>
+                ))}
+                <li>
+                  <Link to="/track">Order Tracking</Link>
+                </li>
+                <li>
+                  <Link to="/blog">Blog</Link>
+                </li>
+                <li>
+                  <Link to="/press">Press Coverage</Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h4>Policy</h4>
+              <ul className="footer-links">
+                {policy.map((page) => (
+                  <li key={page.slug}>
+                    <Link to={`/page/${page.slug}`}>{page.title}</Link>
                   </li>
                 ))}
               </ul>

@@ -7,6 +7,8 @@ import { catalog } from './routes/catalog';
 import { orders } from './routes/orders';
 import { admin } from './routes/admin';
 import { analytics } from './routes/analytics';
+import { content } from './routes/content';
+import { adminContent } from './routes/adminContent';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -57,9 +59,11 @@ app.get('/files/*', async (c) => {
 
 app.route('/api', catalog);
 app.route('/api', orders);
+app.route('/api', content);
 
-// Nested (not mounted separately) so analytics inherits the admin auth guard.
+// Nested (not mounted separately) so these inherit the admin auth guard.
 admin.route('/analytics', analytics);
+admin.route('/content', adminContent);
 app.route('/api/admin', admin);
 
 app.notFound((c) => c.json({ error: `No route for ${c.req.method} ${new URL(c.req.url).pathname}` }, 404));

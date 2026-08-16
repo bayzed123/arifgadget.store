@@ -7,12 +7,16 @@ import { Product } from './pages/Product';
 import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
 import { Track } from './pages/Track';
+import { ContentPage } from './pages/ContentPage';
+import { Blog, BlogPost } from './pages/Blog';
+import { Press } from './pages/Press';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { Dashboard } from './pages/admin/Dashboard';
 import { Products } from './pages/admin/Products';
 import { Orders } from './pages/admin/Orders';
 import { Inventory } from './pages/admin/Inventory';
 import { Settings } from './pages/admin/Settings';
+import { Content } from './pages/admin/Content';
 
 // Vite's BASE_URL is "/" on a custom domain and "/<repo>/" on project Pages.
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -31,6 +35,10 @@ export function App() {
                 <Route path="cart" element={<Cart />} />
                 <Route path="checkout" element={<Checkout />} />
                 <Route path="track" element={<Track />} />
+                <Route path="page/:slug" element={<ContentPage />} />
+                <Route path="blog" element={<Blog />} />
+                <Route path="blog/:slug" element={<BlogPost />} />
+                <Route path="press" element={<Press />} />
               </Route>
 
               <Route path="/admin" element={<AdminLayout />}>
@@ -38,6 +46,7 @@ export function App() {
                 <Route path="products" element={<Products />} />
                 <Route path="orders" element={<Orders />} />
                 <Route path="inventory" element={<Inventory />} />
+                <Route path="content" element={<Content />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
 

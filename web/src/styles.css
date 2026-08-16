@@ -1314,3 +1314,119 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 @media (max-width: 900px) {
   .only-lg { display: none !important; }
 }
+
+/* ============================================================ prose */
+
+.prose { max-width: 68ch; color: var(--ink-2); line-height: 1.72; }
+.prose > * + * { margin-top: 1em; }
+.prose h2 {
+  font-size: 1.28rem;
+  color: var(--ink);
+  margin-top: 1.9em;
+  padding-top: 0.9em;
+  border-top: 1px solid var(--line);
+}
+.prose > h2:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.prose h3 { font-size: 1.05rem; color: var(--ink); margin-top: 1.5em; }
+.prose ul, .prose ol { padding-left: 1.35em; display: grid; gap: 0.45em; }
+.prose li::marker { color: var(--brand); font-weight: 700; }
+.prose strong { color: var(--ink); font-weight: 700; }
+.prose a { color: var(--brand-ink); font-weight: 600; border-bottom: 1px solid currentColor; }
+.prose a:hover { color: var(--brand); }
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: var(--surface-inset);
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.prose blockquote {
+  border-left: 3px solid var(--brand);
+  padding: 4px 0 4px 15px;
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+/* ============================================================ blog */
+
+.blog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 18px;
+}
+.blog-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+.blog-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--line-strong); }
+.blog-cover { aspect-ratio: 16 / 9; background: var(--surface-inset); overflow: hidden; }
+.blog-cover img { width: 100%; height: 100%; object-fit: cover; }
+.blog-cover-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 2.6rem;
+  font-weight: 800;
+  color: rgba(11, 18, 32, 0.32);
+}
+.blog-body { padding: 14px 16px 17px; display: grid; gap: 7px; }
+.blog-body h3 { font-size: 1.02rem; line-height: 1.35; }
+
+.blog-hero {
+  margin-top: 18px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  aspect-ratio: 16 / 9;
+}
+.blog-hero img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ============================================================ press */
+
+.press-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 780px) { .press-grid { grid-template-columns: 1fr 1fr; } }
+
+.press-card {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+.press-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: var(--brand); }
+.press-thumb { background: var(--surface-inset); display: grid; place-items: center; overflow: hidden; }
+.press-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.press-thumb-fallback { font-size: 2rem; opacity: 0.5; }
+.press-body { padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.press-body h3 { font-size: 1rem; line-height: 1.35; }
+.press-link { font-size: 0.82rem; font-weight: 800; color: var(--brand-ink); }
+
+@media (max-width: 520px) {
+  .press-card { grid-template-columns: 96px minmax(0, 1fr); }
+}
+
+/* ============================================================ footer link columns */
+
+.footer-links { list-style: none; padding: 0; display: grid; gap: 8px; font-size: 0.87rem; }
+.footer-links a:hover { color: var(--gold); }
+
+.social-row { display: flex; gap: 10px; margin-top: 14px; }
+.social-row a {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: background 0.15s, transform 0.15s;
+}
+.social-row a:hover { background: #1877f2; border-color: #1877f2; transform: translateY(-2px); }

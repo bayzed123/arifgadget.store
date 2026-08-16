@@ -70,6 +70,8 @@ export interface StoreSettings {
   credit_dev_url?: string;
   credit_author_name?: string;
   credit_author_url?: string;
+  owner_name?: string;
+  facebook_url?: string;
 }
 
 export interface QuoteLine {
@@ -236,4 +238,43 @@ export interface AdminUser {
   username: string;
   name: string;
   role: 'owner' | 'admin' | 'staff';
+}
+
+export interface PageLink {
+  slug: string;
+  title: string;
+  section: 'company' | 'policy' | 'hidden';
+  summary: string;
+}
+
+export interface ContentPage extends PageLink {
+  body: string;
+  updated_at: number;
+}
+
+export interface PostSummary {
+  slug: string;
+  title: string;
+  excerpt: string;
+  cover_url: string;
+  author?: string;
+  tags?: string;
+  published_at: number;
+}
+
+export interface Post extends PostSummary {
+  body: string;
+  updated_at: number;
+}
+
+export interface PressItem {
+  id: number;
+  title: string;
+  outlet: string;
+  url: string;
+  thumbnail_url: string;
+  excerpt: string;
+  published_at: number;
+  visible?: number;
+  sort_order?: number;
 }
