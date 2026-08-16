@@ -3,6 +3,7 @@ import type { Env, Variables } from '../types';
 import { badRequest, conflict, notFound, optionalString, readJson, requireString } from '../lib/http';
 import { getSettings, loadTiers } from '../lib/catalog';
 import { computeCart, type CartLineInput, type CartTotals } from '../lib/pricing';
+import { currentCustomer } from './account';
 
 interface IncomingItem {
   product_id: number;
@@ -138,6 +139,10 @@ orders.post('/orders', async (c) => {
     );
   }
 
+  // A signed-in shopper gets the order filed against their account so it shows
+  // up in their order history; guest checkout stays supported.
+  const customer = await currentCustomer(c);
+
   const orderNo = `AG${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1296)
     .toString(36)
     .toUpperCase()
@@ -148,8 +153,8 @@ orders.post('/orders', async (c) => {
   const statements = [
     c.env.DB.prepare(
       `INSERT INTO orders (order_no, customer_name, customer_phone, customer_email, address, city,
-                           note, payment_method, status, discount, shipping, tax)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+                           note, payment_method, status, discount, shipping, tax, customer_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
     ).bind(
       orderNo,
       customer_name,
@@ -162,6 +167,7 @@ orders.post('/orders', async (c) => {
       totals.discount,
       totals.shipping,
       totals.tax,
+      customer?.sub ?? null,
     ),
     ...totals.lines.map((line) => {
       const product = byId.get(line.product_id)!;

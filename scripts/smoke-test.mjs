@@ -308,6 +308,78 @@ async function main() {
   const audit = await api('/api/admin/audit?limit=10', { auth: true, expect: 200 });
   check('audit trail recorded', audit.body.entries.length > 0);
 
+  // ---------------------------------------------------------- content
+  console.log('\nContent, offers and accounts');
+  const pagesRes = await api('/api/pages', { expect: 200 });
+  check('company pages published', pagesRes.body.company.length >= 6);
+  check('policy pages published', pagesRes.body.policy.length >= 7);
+  const policyPage = await api('/api/pages/return-policy', { expect: 200 });
+  check('a policy page has content', policyPage.body.page.body.length > 200);
+  check('unpublished/unknown page 404s', (await api('/api/pages/not-a-real-page')).status === 404);
+
+  const banners = await api('/api/banners', { expect: 200 });
+  check('offer banners served', Array.isArray(banners.body.banners));
+
+  const badPress = await api('/api/admin/content/press', {
+    method: 'POST', auth: true, body: { title: 'x', url: 'javascript:alert(1)' },
+  });
+  check('press rejects a javascript: link', badPress.status === 400);
+
+  // ---------------------------------------------------------- customer accounts
+  const phone = `013${String(10000000 + Math.floor(Math.random() * 89999999))}`;
+  const reg = await api('/api/account/register', {
+    method: 'POST', expect: 201,
+    body: { name: 'Smoke Shopper', phone, password: 'shopper-pass' },
+  });
+  const custToken = reg.body.token;
+  check('customer can register', typeof custToken === 'string');
+
+  const dupReg = await api('/api/account/register', {
+    method: 'POST', body: { name: 'Again', phone, password: 'shopper-pass' },
+  });
+  check('duplicate number rejected', dupReg.status === 409);
+
+  const badPass = await api('/api/account/login', { method: 'POST', body: { phone, password: 'nope' } });
+  check('wrong customer password rejected', badPass.status === 401);
+
+  const custLogin = await api('/api/account/login', {
+    method: 'POST', expect: 200, body: { phone, password: 'shopper-pass' },
+  });
+  check('customer can sign in', typeof custLogin.body.token === 'string');
+
+  // A customer token must never satisfy the staff guard.
+  const crossover = await fetch(`${BASE}/api/admin/products`, {
+    headers: { Authorization: `Bearer ${custToken}` },
+  });
+  check('customer token rejected by admin routes', crossover.status === 401, `got ${crossover.status}`);
+
+  // …and a staff token must not open a customer account.
+  const reverse = await fetch(`${BASE}/api/account/orders`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  check('admin token rejected by account routes', reverse.status === 401, `got ${reverse.status}`);
+
+  // An order placed while signed in lands in that account's history.
+  const band2 = (await api('/api/products/xiaomi-smart-band-9', { expect: 200 })).body.product;
+  const custOrder = await fetch(`${BASE}/api/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${custToken}` },
+    body: JSON.stringify({
+      customer_name: 'Smoke Shopper', customer_phone: phone,
+      address: '1 Test Road', city: 'Dhaka',
+      items: [{ product_id: band2.id, qty: 1 }],
+    }),
+  });
+  check('signed-in checkout works', custOrder.status === 201, `got ${custOrder.status}`);
+
+  const myOrders = await fetch(`${BASE}/api/account/orders`, {
+    headers: { Authorization: `Bearer ${custToken}` },
+  }).then((r) => r.json());
+  check('order appears in the account history', myOrders.orders.length === 1, `got ${myOrders.orders.length}`);
+
+  const anonAccount = await api('/api/account/orders');
+  check('account routes need a session', anonAccount.status === 401);
+
   report();
 }
 

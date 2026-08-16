@@ -79,3 +79,19 @@ content.get('/press', async (c) => {
   ).all();
   return c.json({ press: results ?? [] });
 });
+
+/** Active promotional banners, filtered to the current date window. */
+content.get('/banners', async (c) => {
+  const now = Math.floor(Date.now() / 1000);
+  const { results } = await c.env.DB.prepare(
+    `SELECT id, title, subtitle, image_url, link_url, cta_label, placement
+       FROM banners
+      WHERE active = 1
+        AND (starts_at IS NULL OR starts_at <= ?1)
+        AND (ends_at   IS NULL OR ends_at   >= ?1)
+      ORDER BY sort_order ASC, id DESC`,
+  )
+    .bind(now)
+    .all();
+  return c.json({ banners: results ?? [] });
+});

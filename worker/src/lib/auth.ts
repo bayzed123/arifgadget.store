@@ -1,4 +1,6 @@
-import type { AdminClaims } from '../types';
+import type { AdminClaims, CustomerClaims } from '../types';
+
+type Claims = AdminClaims | CustomerClaims;
 
 const enc = new TextEncoder();
 
@@ -64,7 +66,7 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
   ]);
 }
 
-export async function signToken(claims: AdminClaims, secret: string): Promise<string> {
+export async function signToken(claims: Claims, secret: string): Promise<string> {
   const header = base64url(enc.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
   const payload = base64url(enc.encode(JSON.stringify(claims)));
   const body = `${header}.${payload}`;
@@ -72,7 +74,7 @@ export async function signToken(claims: AdminClaims, secret: string): Promise<st
   return `${body}.${base64url(signature)}`;
 }
 
-export async function verifyToken(token: string, secret: string): Promise<AdminClaims | null> {
+export async function verifyToken(token: string, secret: string): Promise<Claims | null> {
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   const [header, payload, signature] = parts;
@@ -86,8 +88,11 @@ export async function verifyToken(token: string, secret: string): Promise<AdminC
   if (!valid) return null;
 
   try {
-    const claims = JSON.parse(new TextDecoder().decode(base64urlDecode(payload))) as AdminClaims;
+    const claims = JSON.parse(new TextDecoder().decode(base64urlDecode(payload))) as Claims;
     if (typeof claims.exp !== 'number' || claims.exp * 1000 < Date.now()) return null;
+    // A token minted before `kind` existed, or with an unknown kind, is not
+    // trusted for anything — the holder simply signs in again.
+    if (claims.kind !== 'admin' && claims.kind !== 'customer') return null;
     return claims;
   } catch {
     return null;

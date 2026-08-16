@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import type { Category, Product, StoreSettings } from '../lib/types';
 import { ProductCard } from '../components/ProductCard';
 import { Empty, Spinner } from '../components/ui';
+import { OfferStrip } from '../components/OfferPopup';
 import { money } from '../lib/format';
 
 interface Storefront {
@@ -65,6 +66,8 @@ export function Home() {
           </Link>
         </aside>
       </section>
+
+      <OfferStrip />
 
       <div className="trust-strip">
         {TRUST.map((item) => (

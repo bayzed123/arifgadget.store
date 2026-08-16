@@ -300,3 +300,89 @@ adminContent.delete('/press/:id', async (c) => {
   await audit(c.env, c.get('admin').username, 'press.delete', 'press', id);
   return c.json({ ok: true });
 });
+
+// ---------------------------------------------------------------- offer banners
+
+const PLACEMENTS = ['popup', 'home', 'both'];
+
+adminContent.get('/banners', async (c) => {
+  const { results } = await c.env.DB.prepare('SELECT * FROM banners ORDER BY sort_order ASC, id DESC').all();
+  return c.json({ banners: results ?? [] });
+});
+
+adminContent.post('/banners', async (c) => {
+  const body = await readJson(c);
+  const title = requireString(body.title, 'title', 200);
+  const placement = PLACEMENTS.includes(String(body.placement)) ? String(body.placement) : 'popup';
+
+  const row = await c.env.DB.prepare(
+    `INSERT INTO banners (title, subtitle, image_url, link_url, cta_label, placement, active, starts_at, ends_at, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+  )
+    .bind(
+      title,
+      optionalString(body.subtitle, '', 300),
+      optionalString(body.image_url, '', 600),
+      optionalString(body.link_url, '', 600),
+      optionalString(body.cta_label, 'Shop the offer', 60),
+      placement,
+      body.active === false ? 0 : 1,
+      body.starts_at ? optionalInt(body.starts_at, 0) : null,
+      body.ends_at ? optionalInt(body.ends_at, 0) : null,
+      optionalInt(body.sort_order, 50),
+    )
+    .first<{ id: number }>();
+
+  await audit(c.env, c.get('admin').username, 'banner.create', 'banner', row!.id, title);
+  return c.json({ ok: true, id: row!.id }, 201);
+});
+
+adminContent.patch('/banners/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const body = await readJson(c);
+
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  for (const field of ['title', 'subtitle', 'image_url', 'link_url', 'cta_label'] as const) {
+    if (body[field] !== undefined) {
+      sets.push(`${field} = ?`);
+      binds.push(optionalString(body[field], '', 600));
+    }
+  }
+  if (body.placement !== undefined) {
+    if (!PLACEMENTS.includes(String(body.placement))) badRequest('Invalid placement');
+    sets.push('placement = ?');
+    binds.push(String(body.placement));
+  }
+  if (body.active !== undefined) {
+    sets.push('active = ?');
+    binds.push(body.active ? 1 : 0);
+  }
+  if (body.sort_order !== undefined) {
+    sets.push('sort_order = ?');
+    binds.push(optionalInt(body.sort_order, 50));
+  }
+  for (const field of ['starts_at', 'ends_at'] as const) {
+    if (body[field] !== undefined) {
+      sets.push(`${field} = ?`);
+      binds.push(body[field] ? optionalInt(body[field], 0) : null);
+    }
+  }
+  if (!sets.length) badRequest('Nothing to update');
+
+  const res = await c.env.DB.prepare(`UPDATE banners SET ${sets.join(', ')} WHERE id = ?`)
+    .bind(...binds, id)
+    .run();
+  if (!res.meta.changes) notFound('Banner not found');
+
+  await audit(c.env, c.get('admin').username, 'banner.update', 'banner', id);
+  return c.json({ ok: true });
+});
+
+adminContent.delete('/banners/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const res = await c.env.DB.prepare('DELETE FROM banners WHERE id = ?').bind(id).run();
+  if (!res.meta.changes) notFound('Banner not found');
+  await audit(c.env, c.get('admin').username, 'banner.delete', 'banner', id);
+  return c.json({ ok: true });
+});

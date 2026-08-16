@@ -15,8 +15,11 @@ knowledge needed.
 8. [Handling orders](#8-handling-orders)
 9. [Inventory and restocking](#9-inventory-and-restocking)
 10. [Store settings](#10-store-settings)
-11. [Your daily routine](#11-your-daily-routine)
-12. [Common questions](#12-common-questions)
+11. [Pages, blog and press coverage](#11-pages-blog-and-press-coverage)
+12. [Offer banners and the popup](#12-offer-banners-and-the-popup)
+13. [Customer accounts](#13-customer-accounts)
+14. [Your daily routine](#14-your-daily-routine)
+15. [Common questions](#15-common-questions)
 
 ---
 
@@ -304,7 +307,104 @@ made: products created, prices edited, stock adjusted, orders moved.
 
 ---
 
-## 11. Your daily routine
+## 11. Pages, blog and press coverage
+
+**Content** is where everything that is not a product lives. It has four tabs.
+
+**Pages** — the About Us and Policy links in the footer. Thirteen are already
+written for you: About Us, Corporate, Careers, Complain / Advice, Contact Us,
+FAQs, and the seven policies (Privacy, EMI and Payment, Warranty, Delivery,
+Pre-Order, Refund, Return). Click **Edit** on any of them to rewrite the text in
+your own words. The **Group** field decides which footer column the link sits
+in — *company* for About Us, *policy* for Policy. Turn **Published** off to hide
+a page without deleting it; the footer link disappears with it.
+
+**Blog** — write posts for the `/blog` section. Give each post a title, a short
+excerpt and the body. Posts appear newest first the moment you publish them.
+
+**Press** — every time a newspaper, YouTube channel or Facebook page covers the
+shop, add it here: the outlet name, the headline, the link and a thumbnail
+image. It shows up automatically on `/press`, in the footer and on the customer
+account page. Links must start with `http://` or `https://` — anything else is
+refused.
+
+Writing in these boxes: a line starting with `## ` becomes a heading, `- `
+becomes a bullet, and `**text**` becomes bold. Nothing else is needed.
+
+---
+
+## 12. Offer banners and the popup
+
+**Content → Offers** controls the promotion that greets shoppers.
+
+Click **+ New offer** and fill in:
+
+| Field | What it does |
+|---|---|
+| **Title** | The big line in the popup, e.g. *Eid mega carton sale*. |
+| **Subtitle** | One sentence of detail underneath. |
+| **Image** | Optional picture across the top of the popup. |
+| **Link** | Where the button goes — a path like `/catalog?sort=discount`, or a full `https://` address. |
+| **Button label** | The words on the button. Defaults to *Shop the offer*. |
+| **Show as** | *Popup only*, *Homepage strip only*, or both. |
+| **Starts / Ends** | Optional dates. Outside the window the offer hides itself. |
+| **Sort order** | Lower numbers show first when several offers are live. |
+| **Active** | The on/off switch. |
+
+How customers see it:
+
+- The popup appears about a second after the page loads, so it never blocks the
+  first look at the shop.
+- Each shopper sees a given offer **once**. After they close it, it stays closed
+  on that phone or computer — a popup that returns on every page is an
+  annoyance, not a promotion.
+- It never appears on the cart, checkout, account, tracking or admin pages. A
+  customer in the middle of paying is not interrupted.
+- The homepage strip and the customer's account page show live offers as small
+  cards, so people who closed the popup can still find the deal.
+
+To stop an offer immediately, set **Active** to off — no need to delete it. To
+run it again later, switch it back on.
+
+---
+
+## 13. Customer accounts
+
+Customers can now register with their mobile number and a password. They are
+never forced to: guest checkout still works exactly as before, and guests track
+their orders with an order number plus their phone number.
+
+What an account gives them:
+
+- **Their own order history** at `/account` — every order, its total and its
+  current status, with a link straight into tracking.
+- **Saved details** — name, email, delivery address and city. These fill the
+  checkout form in automatically next time.
+- **Offer updates** — live offers appear on their account page, and recent press
+  coverage alongside them.
+
+What it gives you: orders placed by a signed-in customer are linked to that
+account. When somebody registers with a number they have ordered with before,
+their earlier guest orders are attached to the new account automatically, so
+their history is complete from day one.
+
+You do not manage customer accounts from the dashboard, and you never see a
+password — passwords are stored scrambled and cannot be read back by anyone,
+including you. If a customer forgets theirs, they can register again with the
+same number only after you delete the old account; otherwise take the order over
+the phone as a guest order.
+
+Every product card carries two buttons, so both kinds of shopper are served:
+
+- **Shop now** takes that one product straight to checkout, on its own. Anything
+  already in the cart is left untouched and a notice on the checkout page offers
+  a link back to it.
+- **Add to cart** keeps the customer browsing so they can pile up several
+  products and check out once.
+
+---
+
+## 14. Your daily routine
 
 **Every morning**
 
@@ -331,7 +431,7 @@ made: products created, prices edited, stock adjusted, orders moved.
 
 ---
 
-## 12. Common questions
+## 15. Common questions
 
 **A customer says the price changed when they added more.**
 That is the volume tier working. Larger quantities get a lower unit price. The

@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { AuthProvider, CartProvider, ToastProvider } from './lib/store';
+import { AuthProvider, CartProvider, CustomerProvider, ToastProvider } from './lib/store';
 import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
 import { Catalog } from './pages/Catalog';
@@ -10,6 +10,7 @@ import { Track } from './pages/Track';
 import { ContentPage } from './pages/ContentPage';
 import { Blog, BlogPost } from './pages/Blog';
 import { Press } from './pages/Press';
+import { Account } from './pages/Account';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { Dashboard } from './pages/admin/Dashboard';
 import { Products } from './pages/admin/Products';
@@ -25,7 +26,8 @@ export function App() {
   return (
     <ToastProvider>
       <AuthProvider>
-        <CartProvider>
+        <CustomerProvider>
+          <CartProvider>
           <BrowserRouter basename={basename || undefined}>
             <Routes>
               <Route element={<Layout />}>
@@ -39,6 +41,7 @@ export function App() {
                 <Route path="blog" element={<Blog />} />
                 <Route path="blog/:slug" element={<BlogPost />} />
                 <Route path="press" element={<Press />} />
+                <Route path="account" element={<Account />} />
               </Route>
 
               <Route path="/admin" element={<AdminLayout />}>
@@ -53,7 +56,8 @@ export function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </BrowserRouter>
-        </CartProvider>
+          </CartProvider>
+        </CustomerProvider>
       </AuthProvider>
     </ToastProvider>
   );

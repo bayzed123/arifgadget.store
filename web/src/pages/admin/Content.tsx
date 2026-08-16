@@ -4,7 +4,7 @@ import { date, relativeTime } from '../../lib/format';
 import { useToast } from '../../lib/store';
 import { Empty, Spinner } from '../../components/ui';
 
-type Tab = 'pages' | 'posts' | 'press';
+type Tab = 'pages' | 'posts' | 'press' | 'banners';
 
 interface PageRow {
   id: number;
@@ -31,6 +31,18 @@ interface PostRow {
   published_at: number;
 }
 
+interface BannerRow {
+  id: number;
+  title: string;
+  subtitle: string;
+  image_url: string;
+  link_url: string;
+  cta_label: string;
+  placement: string;
+  active: number;
+  sort_order: number;
+}
+
 interface PressRow {
   id: number;
   title: string;
@@ -53,6 +65,7 @@ export function Content() {
   const [pages, setPages] = useState<PageRow[]>([]);
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [press, setPress] = useState<PressRow[]>([]);
+  const [banners, setBanners] = useState<BannerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -65,11 +78,13 @@ export function Content() {
       api<{ pages: PageRow[] }>('/api/admin/content/pages', { auth: true }),
       api<{ posts: PostRow[] }>('/api/admin/content/posts', { auth: true }),
       api<{ press: PressRow[] }>('/api/admin/content/press', { auth: true }),
+      api<{ banners: BannerRow[] }>('/api/admin/content/banners', { auth: true }),
     ])
-      .then(([p, b, n]) => {
+      .then(([p, b, n, o]) => {
         setPages(p.pages);
         setPosts(b.posts);
         setPress(n.press);
+        setBanners(o.banners);
         setError('');
       })
       .catch((err: Error) => setError(err.message))
@@ -84,7 +99,9 @@ export function Content() {
     setTab(t);
     if (!id) {
       setEditing(
-        t === 'press'
+        t === 'banners'
+          ? { _new: true, title: '', subtitle: '', image_url: '', link_url: '/catalog?sort=discount', cta_label: 'Shop the offer', placement: 'both', active: 1, sort_order: 50 }
+          : t === 'press'
           ? { _new: true, title: '', outlet: '', url: '', thumbnail_url: '', excerpt: '', visible: 1, sort_order: 50 }
           : t === 'posts'
             ? { _new: true, title: '', excerpt: '', body: '', cover_url: '', tags: '', published: 1 }
@@ -95,6 +112,10 @@ export function Content() {
 
     if (t === 'press') {
       setEditing({ ...press.find((p) => p.id === id)! });
+      return;
+    }
+    if (t === 'banners') {
+      setEditing({ ...banners.find((b) => b.id === id)! });
       return;
     }
     // Pages and posts keep their body out of the list payload, so fetch the row.
@@ -167,7 +188,7 @@ export function Content() {
           </p>
         </div>
         <button className="btn primary" onClick={() => openEditor(tab)}>
-          + New {tab === 'pages' ? 'page' : tab === 'posts' ? 'post' : 'press item'}
+          + New {tab === 'pages' ? 'page' : tab === 'posts' ? 'post' : tab === 'press' ? 'press item' : 'offer'}
         </button>
       </div>
 
@@ -181,6 +202,9 @@ export function Content() {
           </button>
           <button className={tab === 'press' ? 'active' : ''} onClick={() => setTab('press')}>
             Press ({press.length})
+          </button>
+          <button className={tab === 'banners' ? 'active' : ''} onClick={() => setTab('banners')}>
+            Offers ({banners.length})
           </button>
         </div>
       </div>
@@ -356,6 +380,57 @@ export function Content() {
                 </tbody>
               </table>
             ))}
+          {tab === 'banners' &&
+            (banners.length === 0 ? (
+              <Empty
+                icon="🎁"
+                title="No offers yet"
+                hint="Create one and it pops up for visitors automatically."
+              />
+            ) : (
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Offer</th>
+                    <th>Shows as</th>
+                    <th className="num">Order</th>
+                    <th>Status</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {banners.map((b) => (
+                    <tr key={b.id}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{b.title}</div>
+                        <span className="tiny dim truncate" style={{ display: 'block', maxWidth: 320 }}>
+                          {b.subtitle}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="badge info">
+                          {b.placement === 'both' ? 'popup + homepage' : b.placement}
+                        </span>
+                      </td>
+                      <td className="num">{b.sort_order}</td>
+                      <td>
+                        <span className={`badge ${b.active ? 'ok' : 'low'}`}>{b.active ? 'live' : 'off'}</span>
+                      </td>
+                      <td>
+                        <div className="row gap-4">
+                          <button className="btn ghost sm" onClick={() => openEditor('banners', b.id)}>
+                            Edit
+                          </button>
+                          <button className="btn ghost sm" onClick={() => remove('banners', b.id, b.title)}>
+                            🗑
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ))}
         </div>
       </div>
 
@@ -384,7 +459,113 @@ export function Content() {
                 />
               </div>
 
-              {tab === 'press' ? (
+              {tab === 'banners' ? (
+                <>
+                  <div className="field">
+                    <label htmlFor="b-sub">Subtitle</label>
+                    <textarea
+                      id="b-sub"
+                      className="textarea"
+                      style={{ minHeight: 64 }}
+                      value={String(editing.subtitle ?? '')}
+                      onChange={(e) => set('subtitle', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-grid">
+                    <div className="field">
+                      <label htmlFor="b-link">Link</label>
+                      <input
+                        id="b-link"
+                        className="input"
+                        placeholder="/catalog?sort=discount"
+                        value={String(editing.link_url ?? '')}
+                        onChange={(e) => set('link_url', e.target.value)}
+                      />
+                      <span className="hint">A path like /catalog?sort=discount, or a full https:// URL.</span>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="b-cta">Button label</label>
+                      <input
+                        id="b-cta"
+                        className="input"
+                        value={String(editing.cta_label ?? '')}
+                        onChange={(e) => set('cta_label', e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="b-place">Show as</label>
+                      <select
+                        id="b-place"
+                        className="select"
+                        value={String(editing.placement ?? 'both')}
+                        onChange={(e) => set('placement', e.target.value)}
+                      >
+                        <option value="popup">Popup only</option>
+                        <option value="home">Homepage strip only</option>
+                        <option value="both">Popup and homepage strip</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="b-sort">Sort order</label>
+                      <input
+                        id="b-sort"
+                        className="input"
+                        type="number"
+                        value={Number(editing.sort_order ?? 50)}
+                        onChange={(e) => set('sort_order', Number(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="field">
+                    <label>Image (optional)</label>
+                    <div className="row gap-12 wrap-row">
+                      {editing.image_url ? (
+                        <img
+                          src={mediaUrl(String(editing.image_url))}
+                          alt=""
+                          style={{ width: 150, height: 84, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--line)' }}
+                        />
+                      ) : null}
+                      <div className="stack gap-8 grow" style={{ minWidth: 220 }}>
+                        <label className="btn ghost sm" style={{ cursor: 'pointer' }}>
+                          {uploading ? 'Uploading…' : 'Upload image'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            hidden
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) void handleUpload(f, 'image_url');
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        <input
+                          className="input"
+                          placeholder="or paste an image URL"
+                          value={String(editing.image_url ?? '')}
+                          onChange={(e) => set('image_url', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <label className="row gap-8 small" style={{ fontWeight: 600, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editing.active)}
+                      onChange={(e) => set('active', e.target.checked)}
+                    />
+                    Live — show this offer to visitors
+                  </label>
+                  <p className="tiny dim">
+                    Each visitor sees a popup once per offer. Editing an existing offer does not re-show it;
+                    create a new one for a new campaign.
+                  </p>
+                </>
+              ) : tab === 'press' ? (
                 <>
                   <div className="form-grid">
                     <div className="field">

@@ -9,6 +9,7 @@ import { PaymentBadges } from './PaymentBadges';
 import { WhatsAppButton } from './WhatsAppButton';
 import { MenuDrawer } from './MenuDrawer';
 import { BottomNav } from './BottomNav';
+import { OfferPopup } from './OfferPopup';
 
 export function Layout() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -126,9 +127,9 @@ export function Layout() {
               <span className="hide-sm">Cart</span>
               {cart.count > 0 && <span className="cart-count">{cart.count > 99 ? '99+' : cart.count}</span>}
             </NavLink>
-            <NavLink to="/admin" className="icon-btn only-lg">
-              <span aria-hidden="true">🔐</span>
-              <span className="hide-sm">Admin</span>
+            <NavLink to="/account" className={({ isActive }) => `icon-btn only-lg ${isActive ? 'active' : ''}`}>
+              <span aria-hidden="true">👤</span>
+              <span className="hide-sm">Account</span>
             </NavLink>
           </div>
         </div>
@@ -322,6 +323,7 @@ export function Layout() {
         </div>
       </footer>
 
+      <OfferPopup />
       <WhatsAppButton number={settings?.whatsapp_number} storeName={settings?.store_name} />
       <MenuDrawer open={menuOpen} categories={categories} onClose={() => setMenuOpen(false)} />
       <BottomNav onOpenCategories={() => setMenuOpen(true)} />

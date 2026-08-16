@@ -158,6 +158,148 @@ export function CartProvider({ children }: { children: ReactNode }) {
   return <CartCtx.Provider value={value}>{children}</CartCtx.Provider>;
 }
 
+/* ============================================================ buy now */
+
+const BUYNOW_KEY = 'ag.buynow.v1';
+
+export interface DirectBuy {
+  product_id: number;
+  qty: number;
+  name: string;
+  slug: string;
+  image_url: string;
+  category: string | null;
+}
+
+/**
+ * "Buy now" checks out a single product without disturbing the cart, so a
+ * shopper mid-basket can grab one thing and come back. Session-scoped: it
+ * should not survive a browser restart the way a cart does.
+ */
+export function setDirectBuy(item: DirectBuy | null): void {
+  try {
+    if (item) sessionStorage.setItem(BUYNOW_KEY, JSON.stringify(item));
+    else sessionStorage.removeItem(BUYNOW_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getDirectBuy(): DirectBuy | null {
+  try {
+    const raw = sessionStorage.getItem(BUYNOW_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DirectBuy;
+    return parsed && typeof parsed.product_id === 'number' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/* ============================================================ customer session */
+
+const CUSTOMER_TOKEN_KEY = 'ag.customer.token';
+
+export function getCustomerToken(): string | null {
+  try {
+    return localStorage.getItem(CUSTOMER_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setCustomerToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(CUSTOMER_TOKEN_KEY, token);
+    else localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export interface CustomerUser {
+  id: number;
+  phone: string;
+  name: string;
+  email?: string;
+  address?: string;
+  city?: string;
+}
+
+interface CustomerApi {
+  customer: CustomerUser | null;
+  ready: boolean;
+  signIn: (phone: string, password: string) => Promise<void>;
+  register: (input: { name: string; phone: string; password: string; email?: string }) => Promise<void>;
+  signOut: () => void;
+  refresh: () => void;
+}
+
+const CustomerCtx = createContext<CustomerApi>({
+  customer: null,
+  ready: false,
+  signIn: async () => {},
+  register: async () => {},
+  signOut: () => {},
+  refresh: () => {},
+});
+
+export const useCustomer = () => useContext(CustomerCtx);
+
+export function CustomerProvider({ children }: { children: ReactNode }) {
+  const [customer, setCustomer] = useState<CustomerUser | null>(null);
+  const [ready, setReady] = useState(false);
+
+  const refresh = useCallback(() => {
+    if (!getCustomerToken()) {
+      setCustomer(null);
+      setReady(true);
+      return;
+    }
+    api<{ customer: CustomerUser }>('/api/account/me', { customerAuth: true })
+      .then((res) => setCustomer(res.customer))
+      .catch(() => {
+        setCustomerToken(null);
+        setCustomer(null);
+      })
+      .finally(() => setReady(true));
+  }, []);
+
+  useEffect(refresh, [refresh]);
+
+  const signIn = useCallback(async (phone: string, password: string) => {
+    const res = await api<{ token: string; customer: CustomerUser }>('/api/account/login', {
+      method: 'POST',
+      body: { phone, password },
+    });
+    setCustomerToken(res.token);
+    setCustomer(res.customer);
+  }, []);
+
+  const register = useCallback(
+    async (input: { name: string; phone: string; password: string; email?: string }) => {
+      const res = await api<{ token: string; customer: CustomerUser }>('/api/account/register', {
+        method: 'POST',
+        body: input,
+      });
+      setCustomerToken(res.token);
+      setCustomer(res.customer);
+    },
+    [],
+  );
+
+  const signOut = useCallback(() => {
+    setCustomerToken(null);
+    setCustomer(null);
+  }, []);
+
+  const value = useMemo<CustomerApi>(
+    () => ({ customer, ready, signIn, register, signOut, refresh }),
+    [customer, ready, signIn, register, signOut, refresh],
+  );
+  return <CustomerCtx.Provider value={value}>{children}</CustomerCtx.Provider>;
+}
+
 /* ============================================================ admin session */
 
 interface AuthApi {

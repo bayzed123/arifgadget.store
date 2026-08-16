@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Product as ProductType } from '../lib/types';
 import { money, number } from '../lib/format';
 import { ProductThumb } from '../components/ProductThumb';
 import { ProductCard } from '../components/ProductCard';
 import { Empty, Rating, Spinner, StockBadge } from '../components/ui';
-import { useCart } from '../lib/store';
+import { setDirectBuy, useCart } from '../lib/store';
 
 /** Mirrors the Worker's tier resolution so the page can price instantly. */
 function unitPriceFor(product: ProductType, qty: number): number {
@@ -28,6 +28,7 @@ export function Product() {
   const [qty, setQty] = useState(1);
   const [error, setError] = useState('');
   const cart = useCart();
+  const navigate = useNavigate();
 
   useEffect(() => {
     setProduct(null);
@@ -200,13 +201,32 @@ export function Product() {
             )}
           </div>
 
-          <button
-            className="btn primary lg block"
-            disabled={!product.in_stock}
-            onClick={() => cart.add(product, qty)}
-          >
-            {product.in_stock ? 'Add to cart' : 'Out of stock'}
-          </button>
+          <div className="stack gap-8">
+            <button
+              className="btn primary lg block"
+              disabled={!product.in_stock}
+              onClick={() => {
+                setDirectBuy({
+                  product_id: product.id,
+                  qty,
+                  name: product.name,
+                  slug: product.slug,
+                  image_url: product.image_url,
+                  category: product.category?.slug ?? null,
+                });
+                navigate('/checkout');
+              }}
+            >
+              {product.in_stock ? 'Shop now' : 'Out of stock'}
+            </button>
+            <button
+              className="btn ghost lg block"
+              disabled={!product.in_stock}
+              onClick={() => cart.add(product, qty)}
+            >
+              Add to cart
+            </button>
+          </div>
 
           {product.stock > 0 && qty > product.stock && (
             <p className="alert warn">Only {product.stock} units are available right now.</p>

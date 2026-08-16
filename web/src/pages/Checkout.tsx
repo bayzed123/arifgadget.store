@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
-import { useCart, useToast } from '../lib/store';
+import { getDirectBuy, setDirectBuy, useCart, useCustomer, useToast } from '../lib/store';
 import { money, number } from '../lib/format';
 import { Empty, Spinner } from '../components/ui';
 import { OrderSummary, useQuote } from './Cart';
@@ -24,7 +24,15 @@ export function Checkout() {
   const cart = useCart();
   const toast = useToast();
   const navigate = useNavigate();
-  const { quote, loading } = useQuote(cart.items);
+  const { customer } = useCustomer();
+
+  // "Shop now" checks out one product on its own; the cart stays where it was.
+  const [direct] = useState(getDirectBuy);
+  const lineItems = useMemo(
+    () => (direct ? [{ product_id: direct.product_id, qty: direct.qty }] : cart.items),
+    [direct, cart.items],
+  );
+  const { quote, loading } = useQuote(lineItems);
 
   const [form, setForm] = useState({
     customer_name: '',
@@ -36,6 +44,20 @@ export function Checkout() {
     payment_method: 'cod',
   });
   const [submitting, setSubmitting] = useState(false);
+
+  // Signed-in shoppers should not retype what we already know.
+  useEffect(() => {
+    if (!customer) return;
+    setForm((prev) => ({
+      ...prev,
+      customer_name: prev.customer_name || customer.name,
+      customer_phone: prev.customer_phone || customer.phone,
+      customer_email: prev.customer_email || customer.email || '',
+      address: prev.address || customer.address || '',
+      city: prev.city || customer.city || '',
+    }));
+  }, [customer]);
+
   const [error, setError] = useState('');
   const [placed, setPlaced] = useState<Placed | null>(null);
 
@@ -51,10 +73,12 @@ export function Checkout() {
     try {
       const res = await api<{ order: Placed }>('/api/orders', {
         method: 'POST',
-        body: { ...form, items: cart.items.map((i) => ({ product_id: i.product_id, qty: i.qty })) },
+        customerAuth: true,
+        body: { ...form, items: lineItems.map((i) => ({ product_id: i.product_id, qty: i.qty })) },
       });
       setPlaced(res.order);
-      cart.clear();
+      if (direct) setDirectBuy(null);
+      else cart.clear();
       toast('Order placed — we will call to confirm', 'success');
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Could not place the order';
@@ -107,7 +131,7 @@ export function Checkout() {
     );
   }
 
-  if (cart.items.length === 0) {
+  if (lineItems.length === 0) {
     return (
       <>
         <h1>Checkout</h1>
@@ -129,9 +153,32 @@ export function Checkout() {
         <div>
           <div className="rule" />
           <h1>Checkout</h1>
-          <p className="small muted">{number(cart.count)} units · {cart.items.length} products</p>
+          <p className="small muted">
+            {direct
+              ? 'Buying one product directly'
+              : `${number(cart.count)} units · ${cart.items.length} products`}
+          </p>
         </div>
       </div>
+
+      {direct && (
+        <div className="alert warn" style={{ marginBottom: 16 }}>
+          You are buying <strong>{direct.name}</strong> on its own.
+          {cart.items.length > 0 && (
+            <>
+              {' '}Your cart with {number(cart.count)} unit{cart.count === 1 ? '' : 's'} is saved —{' '}
+              <Link
+                to="/cart"
+                style={{ textDecoration: 'underline' }}
+                onClick={() => setDirectBuy(null)}
+              >
+                check out the whole cart instead
+              </Link>
+              .
+            </>
+          )}
+        </div>
+      )}
 
       <form className="cart-layout" onSubmit={submit}>
         <div className="stack gap-16">

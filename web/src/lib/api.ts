@@ -35,17 +35,33 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
+  /** Send the staff token. */
   auth?: boolean;
+  /** Send the customer token. Both are Bearer tokens but never interchangeable. */
+  customerAuth?: boolean;
   signal?: AbortSignal;
 }
 
+const CUSTOMER_TOKEN_KEY = 'ag.customer.token';
+
+function customerToken(): string | null {
+  try {
+    return localStorage.getItem(CUSTOMER_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export async function api<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, auth = false, signal } = options;
+  const { method = 'GET', body, auth = false, customerAuth = false, signal } = options;
   const headers: Record<string, string> = {};
 
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (auth) {
     const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  } else if (customerAuth) {
+    const token = customerToken();
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
@@ -80,6 +96,13 @@ export async function api<T = unknown>(path: string, options: RequestOptions = {
 
     // A dead session should not leave a stale token behind.
     if (res.status === 401 && auth) setToken(null);
+    if (res.status === 401 && customerAuth) {
+      try {
+        localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
     throw new ApiError(message, res.status);
   }
 

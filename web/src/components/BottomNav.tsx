@@ -61,7 +61,7 @@ export function BottomNav({ onOpenCategories }: { onOpenCategories: () => void }
       </NavLink>
 
       {/* Four tabs only; the cart keeps its badge in the header. */}
-      <NavLink to="/admin" className={({ isActive }) => (isActive ? 'active' : '')}>
+      <NavLink to="/account" className={({ isActive }) => (isActive ? 'active' : '')}>
         {icons.user}
         <span>Sign In</span>
       </NavLink>

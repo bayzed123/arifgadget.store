@@ -1,12 +1,26 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { Product } from '../lib/types';
 import { money } from '../lib/format';
 import { ProductThumb } from './ProductThumb';
-import { useCart } from '../lib/store';
+import { setDirectBuy, useCart } from '../lib/store';
 
 export function ProductCard({ product }: { product: Product }) {
   const cart = useCart();
+  const navigate = useNavigate();
   const hasTiers = product.tiers.length > 0;
+
+  /** Straight to checkout with this item only — the cart is left untouched. */
+  function buyNow() {
+    setDirectBuy({
+      product_id: product.id,
+      qty: product.moq,
+      name: product.name,
+      slug: product.slug,
+      image_url: product.image_url,
+      category: product.category?.slug ?? null,
+    });
+    navigate('/checkout');
+  }
 
   return (
     <article className="card">
@@ -48,13 +62,19 @@ export function ProductCard({ product }: { product: Product }) {
           )}
         </div>
 
-        <button
-          className="btn primary sm block"
-          disabled={!product.in_stock}
-          onClick={() => cart.add(product)}
-        >
-          {product.in_stock ? 'Add to cart' : 'Unavailable'}
-        </button>
+        <div className="card-actions">
+          <button className="btn primary sm" disabled={!product.in_stock} onClick={buyNow}>
+            {product.in_stock ? 'Shop now' : 'Unavailable'}
+          </button>
+          <button
+            className="btn ghost sm"
+            disabled={!product.in_stock}
+            onClick={() => cart.add(product)}
+            aria-label={`Add ${product.name} to cart`}
+          >
+            Add to cart
+          </button>
+        </div>
       </div>
     </article>
   );

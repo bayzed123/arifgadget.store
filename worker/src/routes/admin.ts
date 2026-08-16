@@ -42,6 +42,8 @@ admin.use('*', async (c, next) => {
 
   const claims = await verifyToken(token, secret(c.env));
   if (!claims) unauthorized('Session expired or invalid — sign in again');
+  // A customer token is signed with the same key; it must never open a staff route.
+  if (claims.kind !== 'admin') unauthorized('This area is for staff accounts');
 
   c.set('admin', claims);
   return next();
@@ -112,6 +114,7 @@ admin.post('/login', async (c) => {
   if (!row || !ok) unauthorized('Wrong username or password');
 
   const claims: AdminClaims = {
+    kind: 'admin',
     sub: row.id,
     email: row.email,
     username: row.username ?? row.email,
