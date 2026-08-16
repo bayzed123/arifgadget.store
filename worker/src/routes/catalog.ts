@@ -25,7 +25,8 @@ catalog.get('/settings', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT key, value FROM settings
       WHERE key IN ('store_name','store_tagline','support_phone','support_phone_2',
-                    'support_email','store_address','whatsapp_number')`,
+                    'support_email','store_address','whatsapp_number',
+                    'credit_dev_name','credit_dev_url','credit_author_name','credit_author_url')`,
   ).all<{ key: string; value: string }>();
   const info = Object.fromEntries((results ?? []).map((r) => [r.key, r.value]));
   return c.json({ ...settings, ...info });

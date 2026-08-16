@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { setCurrencySymbol } from '../lib/format';
 import { useCart, useTheme } from '../lib/store';
@@ -7,6 +7,8 @@ import type { Category, StoreSettings } from '../lib/types';
 import { Logo } from './Logo';
 import { PaymentBadges } from './PaymentBadges';
 import { WhatsAppButton } from './WhatsAppButton';
+import { MenuDrawer } from './MenuDrawer';
+import { BottomNav } from './BottomNav';
 
 export function Layout() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -14,8 +16,13 @@ export function Layout() {
   const [theme, setTheme] = useTheme();
   const [params] = useSearchParams();
   const [query, setQuery] = useState(params.get('q') ?? '');
+  const [menuOpen, setMenuOpen] = useState(false);
   const cart = useCart();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  // Close the drawer whenever the route changes, including on back/forward.
+  useEffect(() => setMenuOpen(false), [pathname, params]);
 
   useEffect(() => {
     api<{ categories: Category[] }>('/api/categories')
@@ -68,6 +75,17 @@ export function Layout() {
 
       <header className="header">
         <div className="wrap">
+          <button
+            className="icon-btn menu-btn"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Open menu"
+            aria-expanded={menuOpen}
+          >
+            <span style={{ fontSize: '1.25rem', lineHeight: 1 }} aria-hidden="true">
+              ☰
+            </span>
+          </button>
+
           <Link to="/" className="brand-link" aria-label="Arif Gadgets home">
             <Logo />
           </Link>
@@ -84,7 +102,7 @@ export function Layout() {
 
           <div className="header-actions">
             <button
-              className="icon-btn"
+              className="icon-btn only-lg"
               onClick={() => setTheme(nextTheme)}
               aria-label={`Switch to ${nextTheme} theme`}
               title={`Switch to ${nextTheme} theme`}
@@ -96,7 +114,7 @@ export function Layout() {
               <span className="hide-sm">Cart</span>
               {cart.count > 0 && <span className="cart-count">{cart.count > 99 ? '99+' : cart.count}</span>}
             </NavLink>
-            <NavLink to="/admin" className="icon-btn">
+            <NavLink to="/admin" className="icon-btn only-lg">
               <span aria-hidden="true">🔐</span>
               <span className="hide-sm">Admin</span>
             </NavLink>
@@ -210,13 +228,50 @@ export function Layout() {
           </div>
 
           <div className="footer-bot">
-            <span>© {new Date().getFullYear()} Arif Gadgets. All rights reserved.</span>
-            <span>Built on Cloudflare Workers · D1</span>
+            <span>
+              © {new Date().getFullYear()} {settings?.store_name ?? 'Arif Gadgets'}. All rights reserved.
+            </span>
+
+            <span className="credits">
+              {settings?.credit_dev_name && (
+                <span>
+                  <span className="k">Dev: </span>
+                  {settings.credit_dev_url ? (
+                    <a href={settings.credit_dev_url} target="_blank" rel="noopener noreferrer">
+                      {settings.credit_dev_name}
+                    </a>
+                  ) : (
+                    settings.credit_dev_name
+                  )}
+                </span>
+              )}
+
+              {settings?.credit_dev_name && settings?.credit_author_name && (
+                <span className="sep" aria-hidden="true">
+                  ·
+                </span>
+              )}
+
+              {settings?.credit_author_name && (
+                <span>
+                  <span className="k">Developer: </span>
+                  {settings.credit_author_url ? (
+                    <a href={settings.credit_author_url} target="_blank" rel="noopener noreferrer">
+                      {settings.credit_author_name}
+                    </a>
+                  ) : (
+                    settings.credit_author_name
+                  )}
+                </span>
+              )}
+            </span>
           </div>
         </div>
       </footer>
 
       <WhatsAppButton number={settings?.whatsapp_number} storeName={settings?.store_name} />
+      <MenuDrawer open={menuOpen} categories={categories} onClose={() => setMenuOpen(false)} />
+      <BottomNav onOpenCategories={() => setMenuOpen(true)} />
     </>
   );
 }

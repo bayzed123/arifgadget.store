@@ -66,6 +66,10 @@ export interface StoreSettings {
   support_email?: string;
   store_address?: string;
   whatsapp_number?: string;
+  credit_dev_name?: string;
+  credit_dev_url?: string;
+  credit_author_name?: string;
+  credit_author_url?: string;
 }
 
 export interface QuoteLine {

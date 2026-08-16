@@ -1148,3 +1148,169 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .contact-list { display: grid; gap: 9px; font-size: 0.87rem; }
 .contact-list .row-i { display: flex; gap: 10px; align-items: flex-start; }
 .contact-list .ic { flex-shrink: 0; opacity: 0.85; }
+
+/* ============================================================ menu drawer */
+
+.drawer-root { position: fixed; inset: 0; z-index: 150; pointer-events: none; }
+.drawer-root.open { pointer-events: auto; }
+
+.drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 11, 20, 0.55);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+.drawer-root.open .drawer-backdrop { opacity: 1; }
+
+.drawer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: min(340px, 88vw);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform 0.24s cubic-bezier(0.22, 0.61, 0.36, 1);
+  box-shadow: var(--shadow-lg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.drawer-root.open .drawer { transform: translateX(0); }
+
+.drawer-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--navy);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.drawer-head button {
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.drawer-head button:hover { background: rgba(255, 255, 255, 0.22); }
+
+.drawer-list { display: flex; flex-direction: column; }
+.drawer-list.secondary { border-top: 8px solid var(--surface-inset); }
+.drawer-list a {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.drawer-list a:hover { background: var(--surface-inset); }
+.drawer-list a.accent { color: var(--brand-ink); font-weight: 800; }
+.drawer-list .ic { font-size: 1.15rem; width: 24px; text-align: center; }
+.drawer-list .nm { flex: 1; }
+.drawer-list .cnt { font-size: 0.78rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.drawer-list .chev { color: var(--ink-3); font-size: 1.5rem; line-height: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer, .drawer-backdrop { transition: none; }
+}
+
+/* ============================================================ bottom tab bar */
+
+.bottom-nav { display: none; }
+
+@media (max-width: 900px) {
+  .bottom-nav {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 120;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -2px 14px rgba(11, 18, 32, 0.09);
+    /* clear the iOS home indicator */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .bottom-nav a,
+  .bottom-nav button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 9px 4px 8px;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--ink-3);
+    min-height: 56px;
+  }
+  .bottom-nav svg { width: 23px; height: 23px; }
+  .bottom-nav .active { color: var(--brand); }
+
+  /* keep the last of the page clear of the bar and the chat button */
+  .footer { padding-bottom: 150px; }
+  .wa-fab { bottom: 76px; }
+}
+
+.bottom-nav .ic-wrap { position: relative; display: inline-flex; }
+.tab-badge {
+  position: absolute;
+  top: -5px;
+  right: -9px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 0.63rem;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+
+/* Hamburger is the mobile entry point; desktop keeps the category strip. */
+.menu-btn { display: none; }
+@media (max-width: 900px) {
+  .menu-btn { display: inline-flex; }
+  .catnav { display: none; }
+}
+
+/* ============================================================ footer credits */
+
+.credits { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.credits .sep { color: #3b4a63; }
+.credits a {
+  color: #cbd5e1;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(203, 213, 225, 0.28);
+  transition: color 0.15s, border-color 0.15s;
+}
+.credits a:hover { color: var(--gold); border-bottom-color: var(--gold); }
+.credits .k { color: #64748b; font-weight: 600; }
+
+/* On phones the theme toggle and staff link live in the drawer and tab bar,
+   so the header keeps to two rows: menu + logo + cart, then search. */
+@media (max-width: 900px) {
+  .only-lg { display: none !important; }
+}
