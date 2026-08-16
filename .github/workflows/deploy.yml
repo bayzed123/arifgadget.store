@@ -72,7 +72,10 @@ jobs:
       - name: Provision the dashboard owner
         env:
           D1_DATABASE_ID: ${{ steps.bootstrap.outputs.database_id }}
-          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          # Prefer the variable: a username is not sensitive, and storing one
+          # as a secret makes Actions redact that word everywhere it appears —
+          # including inside the API URL, which then cannot cross job boundaries.
+          ADMIN_USERNAME: ${{ vars.ADMIN_USERNAME || secrets.ADMIN_USERNAME }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           ADMIN_NAME: ${{ vars.ADMIN_NAME }}

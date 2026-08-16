@@ -77,7 +77,6 @@ dead stock.
 |---|---|---|
 | `CLOUD_FLARE_API` | **yes** | Cloudflare API token with *Workers Scripts: Edit*, *D1: Edit*, *Workers R2 Storage: Edit*, *Workers KV Storage: Edit* |
 | `CLOUD_FLARE_ACCOUNT_ID` | **yes** | Your Cloudflare account ID |
-| `ADMIN_USERNAME` | recommended | Dashboard sign-in name, e.g. `arifgadget` |
 | `ADMIN_PASSWORD` | recommended | At least 10 characters |
 | `ADMIN_EMAIL` | no | Contact address only — sign-in uses the username |
 | `JWT_SECRET` | no | Generated automatically on first deploy if omitted |
@@ -91,14 +90,20 @@ The scripts also accept the standard `CLOUDFLARE_API_TOKEN` /
 
 | Variable | What it does |
 |---|---|
-| `API_DOMAIN` | Hostname for the API, e.g. `api.arifgadget.store`. wrangler creates the Cloudflare custom domain for you. **Recommended.** |
+| `API_DOMAIN` | Hostname for the API, e.g. `api.arifgadget.store`. Requires the domain to be a **zone in your Cloudflare account**; if it is not, the deploy says so and falls back to workers.dev. |
 | `CUSTOM_DOMAIN` | e.g. `arifgadget.store` — serves Pages from the root and writes a `CNAME` |
 | `WORKERS_SUBDOMAIN` | Alternative to `API_DOMAIN`: registers your account's one-time `*.workers.dev` name |
 | `API_BASE_URL` | Alternative again: an API address you route yourself |
+| `ADMIN_USERNAME` | Dashboard sign-in name, e.g. `arifgadget` |
 | `ADMIN_NAME` | Display name for the owner account |
 
-> Set `ADMIN_USERNAME` and `ADMIN_PASSWORD`. Without them the dashboard falls back
-> to first-run account creation, which is open to whoever reaches it first.
+> Set `ADMIN_USERNAME` (variable) and `ADMIN_PASSWORD` (secret). Without them the
+> dashboard falls back to first-run account creation, which is open to whoever
+> reaches it first.
+>
+> **Keep the username a variable, not a secret.** Actions redacts a secret's value
+> everywhere it appears in a run — if the username is a word that also occurs in
+> your domain, the API URL gets redacted too and cannot be passed between jobs.
 
 ### 2. Enable GitHub Pages
 

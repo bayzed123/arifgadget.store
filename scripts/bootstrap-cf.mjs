@@ -217,7 +217,39 @@ if (!r2Ready) {
  * Preferred production setup: the API on your own hostname. wrangler creates
  * the Cloudflare custom domain itself, provided the zone sits in this account.
  */
-const apiDomain = process.env.API_DOMAIN?.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+const requestedDomain = process.env.API_DOMAIN?.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+/**
+ * A Worker custom domain only works when the hostname sits inside a zone this
+ * Cloudflare account controls. If the domain's DNS lives elsewhere, wrangler
+ * fails with "Can't infer zone from route" — so check first and fall back
+ * rather than breaking the deploy.
+ */
+async function zoneFor(host) {
+  const zones = await cf.callRoot(`/zones?account.id=${cf.accountId}&per_page=50`);
+  if (!Array.isArray(zones)) return null;
+  const match = zones
+    .map((z) => z.name)
+    .filter((name) => host === name || host.endsWith(`.${name}`))
+    .sort((a, b) => b.length - a.length)[0];
+  return match ?? null;
+}
+
+let apiDomain = requestedDomain;
+if (apiDomain) {
+  const zone = await zoneFor(apiDomain);
+  if (!zone) {
+    console.log('');
+    console.log(`  API_DOMAIN "${apiDomain}" IGNORED — no matching zone in this Cloudflare account.`);
+    console.log('  A Worker custom domain needs the domain\'s DNS hosted on Cloudflare.');
+    console.log('  Add the domain as a zone (and point its nameservers at Cloudflare)');
+    console.log('  to use it; falling back to workers.dev for now.');
+    console.log('');
+    apiDomain = '';
+  } else {
+    console.log(`  Zone      ${zone} (matched for ${apiDomain})`);
+  }
+}
 
 if (apiDomain) {
   toml = setTomlValue(toml, '', 'workers_dev', 'false', { raw: true });

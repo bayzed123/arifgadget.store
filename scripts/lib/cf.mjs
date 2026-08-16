@@ -60,7 +60,15 @@ export function client() {
     return payload?.result;
   }
 
-  return { call, accountId };
+  /** For endpoints that are not under /accounts/{id}, such as /zones. */
+  async function callRoot(path) {
+    const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || payload?.success === false) return null;
+    return payload?.result ?? null;
+  }
+
+  return { call, callRoot, accountId };
 }
 
 /** True when Cloudflare rejected the create because the resource already exists. */
