@@ -178,6 +178,11 @@ take them — product photos sell.
 **Tips:** shoot square, on a plain background, in daylight. Around
 1000×1000 pixels is plenty.
 
+**If "Upload image" reports that storage is off:** R2 storage has not been
+enabled on the Cloudflare account yet. Everything else in the shop still works.
+Either paste an image URL instead, or ask whoever manages the Cloudflare
+account to enable **R2** in the dashboard and re-run the Deploy workflow.
+
 ---
 
 ## 6. Editing and removing products

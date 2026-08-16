@@ -50,18 +50,38 @@ async function ensureD1() {
   }
 }
 
+/** Cloudflare returns 10042 until R2 is switched on for the account. */
+function isR2Disabled(err) {
+  return (err.errors ?? []).some((e) => e.code === 10042 || /enable R2/i.test(e.message ?? ''));
+}
+
+/**
+ * R2 only backs admin image uploads. If the account has not opted into R2 yet
+ * we skip it and drop the binding rather than failing the whole deploy — the
+ * storefront, dashboard and analytics do not depend on it.
+ *
+ * @returns true when the bucket is ready to bind.
+ */
 async function ensureR2() {
-  const list = await cf.call('/r2/buckets');
-  if ((list?.buckets ?? []).some((b) => b.name === R2_NAME)) {
-    console.log(`  R2        reuse   ${R2_NAME}`);
-    return;
-  }
   try {
+    const list = await cf.call('/r2/buckets');
+    if ((list?.buckets ?? []).some((b) => b.name === R2_NAME)) {
+      console.log(`  R2        reuse   ${R2_NAME}`);
+      return true;
+    }
     await cf.call('/r2/buckets', { method: 'POST', body: { name: R2_NAME } });
     console.log(`  R2        created ${R2_NAME}`);
+    return true;
   } catch (err) {
-    if (!isAlreadyExists(err)) throw err;
-    console.log(`  R2        reuse   ${R2_NAME}`);
+    if (isAlreadyExists(err)) {
+      console.log(`  R2        reuse   ${R2_NAME}`);
+      return true;
+    }
+    if (isR2Disabled(err)) {
+      console.log(`  R2        SKIPPED — not enabled on this Cloudflare account`);
+      return false;
+    }
+    throw err;
   }
 }
 
@@ -124,17 +144,49 @@ function setTomlValue(source, table, key, value) {
   return lines.join('\n');
 }
 
+/** Drops a whole TOML table — used to remove the R2 binding when R2 is off. */
+function removeTomlTable(source, table) {
+  const lines = source.split('\n');
+  const out = [];
+  let skipping = false;
+
+  for (const line of lines) {
+    const header = line.trim().match(/^\[\[?([^\]]+)\]\]?$/);
+    if (header) skipping = header[1] === table;
+    if (!skipping) out.push(line);
+  }
+  return out.join('\n');
+}
+
 console.log('\nProvisioning Cloudflare resources\n');
 
 const [databaseId, kvId] = await Promise.all([ensureD1(), ensureKV()]);
-await ensureR2();
+const r2Ready = await ensureR2();
 
 let toml = readFileSync(WRANGLER, 'utf8');
 toml = setTomlValue(toml, 'd1_databases', 'database_id', databaseId);
 toml = setTomlValue(toml, 'kv_namespaces', 'id', kvId);
 toml = setTomlValue(toml, '', 'account_id', cf.accountId);
+// Binding a bucket that does not exist would fail `wrangler deploy` outright.
+if (!r2Ready) toml = removeTomlTable(toml, 'r2_buckets');
 writeFileSync(WRANGLER, toml);
 console.log('\n  wrangler.toml updated with the resolved IDs');
+
+if (!r2Ready) {
+  console.log('');
+  console.log('  ┌────────────────────────────────────────────────────────────────┐');
+  console.log('  │  Product image upload is DISABLED for this deploy.             │');
+  console.log('  │                                                                │');
+  console.log('  │  R2 is not enabled on this Cloudflare account. Everything      │');
+  console.log('  │  else — storefront, dashboard, orders, analytics — works.      │');
+  console.log('  │  Products fall back to generated category artwork.             │');
+  console.log('  │                                                                │');
+  console.log('  │  To turn uploads on: Cloudflare dashboard → R2 → enable it     │');
+  console.log('  │  (needs a payment method, the free tier is generous), then     │');
+  console.log('  │  re-run this workflow. Nothing else to change.                 │');
+  console.log('  └────────────────────────────────────────────────────────────────┘');
+  console.log('');
+}
 
 const subdomain = await workersSubdomain();
 const apiUrl = process.env.API_BASE_URL || (subdomain ? `https://${WORKER_NAME}.${subdomain}.workers.dev` : '');
@@ -145,7 +197,7 @@ else console.log('  API URL   unknown — set the API_BASE_URL repository variab
 if (process.env.GITHUB_OUTPUT) {
   appendFileSync(
     process.env.GITHUB_OUTPUT,
-    `database_id=${databaseId}\nkv_id=${kvId}\napi_url=${apiUrl}\n`,
+    `database_id=${databaseId}\nkv_id=${kvId}\napi_url=${apiUrl}\nr2_enabled=${r2Ready}\n`,
   );
 }
 

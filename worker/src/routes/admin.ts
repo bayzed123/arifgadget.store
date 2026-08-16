@@ -585,6 +585,14 @@ function isUploadedFile(value: unknown): value is UploadedFile {
 }
 
 admin.post('/uploads', async (c) => {
+  if (!c.env.MEDIA) {
+    throw new HTTPException(503, {
+      message:
+        'Image upload is off because R2 storage is not enabled on this Cloudflare account. ' +
+        'Enable R2 in the Cloudflare dashboard and re-run the deploy, or paste an image URL instead.',
+    });
+  }
+
   const form = await c.req.raw.formData().catch(() => badRequest('Send a multipart/form-data body'));
   const file: unknown = form.get('file');
   if (!isUploadedFile(file)) badRequest('Attach the image as the "file" field');

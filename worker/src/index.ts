@@ -40,6 +40,8 @@ app.get('/health', async (c) => {
 
 /** Serves product media straight out of R2 — no public bucket required. */
 app.get('/files/*', async (c) => {
+  if (!c.env.MEDIA) return c.notFound();
+
   const key = decodeURIComponent(new URL(c.req.url).pathname.replace(/^\/files\//, ''));
   if (!key) return c.notFound();
 

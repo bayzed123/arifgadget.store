@@ -114,6 +114,18 @@ Push to the deployment branch, or run the **Deploy** workflow manually. On the f
 
 Re-runs reuse everything — the provisioning step is idempotent.
 
+### A note on R2 (product image upload)
+
+R2 needs a one-time opt-in in the Cloudflare dashboard before the API will
+create buckets. **The deploy does not fail without it** — if R2 is off, the
+bootstrap skips the bucket, drops the binding and prints a notice. The
+storefront, dashboard, orders and analytics all work; only image upload is
+disabled, and products fall back to generated category artwork.
+
+To turn uploads on: Cloudflare dashboard → **R2** → enable (it asks for a
+payment method; the free tier covers a shop this size), then re-run the
+**Deploy** workflow. Nothing in the code changes.
+
 ---
 
 ## Local development
