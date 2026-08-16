@@ -91,6 +91,7 @@ The scripts also accept the standard `CLOUDFLARE_API_TOKEN` /
 
 | Variable | What it does |
 |---|---|
+| `WORKERS_SUBDOMAIN` | Registers your account's one-time `*.workers.dev` name, e.g. `arifgadgets`. Needed on a fresh Cloudflare account — see below. |
 | `CUSTOM_DOMAIN` | e.g. `arifgadget.store` — serves Pages from the root and writes a `CNAME` |
 | `API_BASE_URL` | Override the API URL if the Worker is on a custom domain |
 | `ADMIN_NAME` | Display name for the owner account |
@@ -113,6 +114,20 @@ Push to the deployment branch, or run the **Deploy** workflow manually. On the f
 5. Health-checks the API, then builds and publishes the storefront
 
 Re-runs reuse everything — the provisioning step is idempotent.
+
+### A fresh Cloudflare account needs two one-time clicks
+
+Both are account-level opt-ins Cloudflare requires once, and the deploy tells you
+which one is missing rather than failing cryptically.
+
+**1. A `workers.dev` subdomain.** A Worker has no public address until the account
+registers one. Either set the `WORKERS_SUBDOMAIN` variable to the name you want
+(the API then lives at `https://arif-gadgets-api.<name>.workers.dev`) and re-run,
+or register it once in the Cloudflare dashboard under Workers & Pages. If the API
+is going on your own domain instead, set `API_BASE_URL` and skip this.
+
+The name is account-wide and effectively permanent, so the deploy never guesses
+one — it only registers the name you explicitly ask for.
 
 ### A note on R2 (product image upload)
 

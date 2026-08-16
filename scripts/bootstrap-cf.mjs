@@ -105,12 +105,37 @@ async function ensureKV() {
   }
 }
 
+/**
+ * A Worker has no public URL until the account registers a workers.dev
+ * subdomain — a one-time onboarding step. The name is account-wide and
+ * effectively permanent, so it is only ever registered when explicitly
+ * requested via the WORKERS_SUBDOMAIN variable, never guessed.
+ */
 async function workersSubdomain() {
+  let current = null;
   try {
     const res = await cf.call('/workers/subdomain');
-    return res?.subdomain ?? null;
+    current = res?.subdomain || null;
   } catch {
     return null; // token may not carry the scope; the caller falls back
+  }
+
+  if (current) {
+    console.log(`  Subdomain reuse   ${current}.workers.dev`);
+    return current;
+  }
+
+  const wanted = process.env.WORKERS_SUBDOMAIN?.trim().toLowerCase();
+  if (!wanted) return null;
+
+  try {
+    await cf.call('/workers/subdomain', { method: 'PUT', body: { subdomain: wanted } });
+    console.log(`  Subdomain created ${wanted}.workers.dev`);
+    return wanted;
+  } catch (err) {
+    console.error(`  Subdomain FAILED  "${wanted}" — ${err.message}`);
+    console.error('  It is probably already taken. Pick another WORKERS_SUBDOMAIN value.');
+    return null;
   }
 }
 
@@ -119,7 +144,7 @@ async function workersSubdomain() {
  * the top-level preamble. Line-oriented rather than a full TOML parse so
  * comments and formatting survive untouched.
  */
-function setTomlValue(source, table, key, value) {
+function setTomlValue(source, table, key, value, { raw = false } = {}) {
   const lines = source.split('\n');
   let inTable = table === '';
   let replaced = false;
@@ -135,7 +160,7 @@ function setTomlValue(source, table, key, value) {
 
     const match = line.match(new RegExp(`^(\\s*)${key}\\s*=`));
     if (match) {
-      lines[i] = `${match[1]}${key} = "${value}"`;
+      lines[i] = `${match[1]}${key} = ${raw ? value : `"${value}"`}`;
       replaced = true;
     }
   }
@@ -189,10 +214,38 @@ if (!r2Ready) {
 }
 
 const subdomain = await workersSubdomain();
-const apiUrl = process.env.API_BASE_URL || (subdomain ? `https://${WORKER_NAME}.${subdomain}.workers.dev` : '');
+const custom = process.env.API_BASE_URL?.trim();
+const apiUrl = custom || (subdomain ? `https://${WORKER_NAME}.${subdomain}.workers.dev` : '');
 
-if (apiUrl) console.log(`  API URL   ${apiUrl}`);
-else console.log('  API URL   unknown — set the API_BASE_URL repository variable');
+if (apiUrl) {
+  console.log(`  API URL   ${apiUrl}`);
+} else {
+  // Without a subdomain `wrangler deploy` aborts on workers_dev = true. Turning
+  // it off lets the Worker still upload, so migrations and the admin account
+  // are in place the moment a route exists.
+  toml = setTomlValue(toml, '', 'workers_dev', 'false', { raw: true });
+  writeFileSync(WRANGLER, toml);
+
+  console.log('');
+  console.log('  ┌────────────────────────────────────────────────────────────────┐');
+  console.log('  │  This Cloudflare account has no workers.dev subdomain yet, so  │');
+  console.log('  │  the API has no public address. One of these fixes it:         │');
+  console.log('  │                                                                │');
+  console.log('  │  a) Set the WORKERS_SUBDOMAIN repository variable to the name  │');
+  console.log('  │     you want (e.g. "arifgadgets") and re-run. The API becomes  │');
+  console.log('  │     https://arif-gadgets-api.<name>.workers.dev                │');
+  console.log('  │                                                                │');
+  console.log('  │  b) Register it once in the Cloudflare dashboard under         │');
+  console.log('  │     Workers & Pages, then re-run.                              │');
+  console.log('  │                                                                │');
+  console.log('  │  c) Put the API on your own domain and set the API_BASE_URL    │');
+  console.log('  │     repository variable to it.                                 │');
+  console.log('  │                                                                │');
+  console.log('  │  The Worker still uploads and the database is migrated, so     │');
+  console.log('  │  the store is live the moment an address exists.               │');
+  console.log('  └────────────────────────────────────────────────────────────────┘');
+  console.log('');
+}
 
 if (process.env.GITHUB_OUTPUT) {
   appendFileSync(

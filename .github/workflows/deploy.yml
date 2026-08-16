@@ -52,6 +52,7 @@ jobs:
         id: bootstrap
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL }}
+          WORKERS_SUBDOMAIN: ${{ vars.WORKERS_SUBDOMAIN }}
         run: node scripts/bootstrap-cf.mjs
 
       - name: Apply D1 migrations
