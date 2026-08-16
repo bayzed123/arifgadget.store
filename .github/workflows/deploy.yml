@@ -118,7 +118,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
         run: |
+          # In order: the explicit variable, the CNAME file GitHub writes when
+          # you set a custom domain in the UI, then the Pages API.
           DOMAIN="$CUSTOM_DOMAIN"
+          if [ -z "$DOMAIN" ] && [ -f CNAME ]; then
+            DOMAIN=$(tr -d '[:space:]' < CNAME)
+          fi
           if [ -z "$DOMAIN" ]; then
             DOMAIN=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
                           -H "Accept: application/vnd.github+json" \
