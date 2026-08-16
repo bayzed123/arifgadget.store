@@ -91,9 +91,10 @@ The scripts also accept the standard `CLOUDFLARE_API_TOKEN` /
 
 | Variable | What it does |
 |---|---|
-| `WORKERS_SUBDOMAIN` | Registers your account's one-time `*.workers.dev` name, e.g. `arifgadgets`. Needed on a fresh Cloudflare account — see below. |
+| `API_DOMAIN` | Hostname for the API, e.g. `api.arifgadget.store`. wrangler creates the Cloudflare custom domain for you. **Recommended.** |
 | `CUSTOM_DOMAIN` | e.g. `arifgadget.store` — serves Pages from the root and writes a `CNAME` |
-| `API_BASE_URL` | Override the API URL if the Worker is on a custom domain |
+| `WORKERS_SUBDOMAIN` | Alternative to `API_DOMAIN`: registers your account's one-time `*.workers.dev` name |
+| `API_BASE_URL` | Alternative again: an API address you route yourself |
 | `ADMIN_NAME` | Display name for the owner account |
 
 > Set `ADMIN_USERNAME` and `ADMIN_PASSWORD`. Without them the dashboard falls back
@@ -115,19 +116,34 @@ Push to the deployment branch, or run the **Deploy** workflow manually. On the f
 
 Re-runs reuse everything — the provisioning step is idempotent.
 
-### A fresh Cloudflare account needs two one-time clicks
+### Going live on arifgadget.store
 
-Both are account-level opt-ins Cloudflare requires once, and the deploy tells you
-which one is missing rather than failing cryptically.
+The intended production layout, using the domain you already own:
 
-**1. A `workers.dev` subdomain.** A Worker has no public address until the account
-registers one. Either set the `WORKERS_SUBDOMAIN` variable to the name you want
-(the API then lives at `https://arif-gadgets-api.<name>.workers.dev`) and re-run,
-or register it once in the Cloudflare dashboard under Workers & Pages. If the API
-is going on your own domain instead, set `API_BASE_URL` and skip this.
+| | Address | Served by |
+|---|---|---|
+| Storefront + dashboard | `arifgadget.store` | GitHub Pages |
+| API | `api.arifgadget.store` | Cloudflare Worker |
 
-The name is account-wide and effectively permanent, so the deploy never guesses
-one — it only registers the name you explicitly ask for.
+Steps, once the domain's nameservers point at Cloudflare:
+
+1. Add `arifgadget.store` as a zone in your Cloudflare account.
+2. Set repository variables `CUSTOM_DOMAIN=arifgadget.store` and
+   `API_DOMAIN=api.arifgadget.store`.
+3. In **Settings → Pages**, set the custom domain to `arifgadget.store`.
+   In Cloudflare DNS, the records pointing at GitHub Pages must be **DNS only**
+   (grey cloud), not proxied — Pages terminates its own TLS.
+4. Re-run **Deploy**. wrangler creates the `api.arifgadget.store` custom domain
+   itself; nothing to click.
+
+**Until the domain is ready**, give the API a temporary address instead: set
+`WORKERS_SUBDOMAIN` to a name you like and the API lands on
+`https://arif-gadgets-api.<name>.workers.dev`. That name is account-wide and
+effectively permanent, so the deploy never invents one — it registers only what
+you ask for.
+
+The Worker deploys and the database migrates either way; the storefront build is
+the only step that needs the API to have an address.
 
 ### A note on R2 (product image upload)
 

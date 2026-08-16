@@ -213,9 +213,28 @@ if (!r2Ready) {
   console.log('');
 }
 
-const subdomain = await workersSubdomain();
+/**
+ * Preferred production setup: the API on your own hostname. wrangler creates
+ * the Cloudflare custom domain itself, provided the zone sits in this account.
+ */
+const apiDomain = process.env.API_DOMAIN?.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+if (apiDomain) {
+  toml = setTomlValue(toml, '', 'workers_dev', 'false', { raw: true });
+  if (!toml.includes('[[routes]]')) {
+    toml += `\n[[routes]]\npattern = "${apiDomain}"\ncustom_domain = true\n`;
+  } else {
+    toml = setTomlValue(toml, 'routes', 'pattern', apiDomain);
+  }
+  writeFileSync(WRANGLER, toml);
+  console.log(`  Route     ${apiDomain} (Cloudflare custom domain)`);
+}
+
+const subdomain = apiDomain ? null : await workersSubdomain();
 const custom = process.env.API_BASE_URL?.trim();
-const apiUrl = custom || (subdomain ? `https://${WORKER_NAME}.${subdomain}.workers.dev` : '');
+const apiUrl =
+  custom ||
+  (apiDomain ? `https://${apiDomain}` : subdomain ? `https://${WORKER_NAME}.${subdomain}.workers.dev` : '');
 
 if (apiUrl) {
   console.log(`  API URL   ${apiUrl}`);

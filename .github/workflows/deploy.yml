@@ -51,6 +51,7 @@ jobs:
       - name: Provision Cloudflare resources
         id: bootstrap
         env:
+          API_DOMAIN: ${{ vars.API_DOMAIN }}
           API_BASE_URL: ${{ vars.API_BASE_URL }}
           WORKERS_SUBDOMAIN: ${{ vars.WORKERS_SUBDOMAIN }}
         run: node scripts/bootstrap-cf.mjs
@@ -115,7 +116,7 @@ jobs:
           VITE_API_BASE: ${{ needs.api.outputs.api_url }}
         run: |
           if [ -z "$VITE_API_BASE" ]; then
-            echo "::error::No API URL was resolved. Set the API_BASE_URL repository variable."
+            echo "::error::The API has no public address yet, so the storefront would have nothing to talk to. Set ONE of these repository variables and re-run: API_DOMAIN (e.g. api.arifgadget.store — recommended, wrangler creates the Cloudflare custom domain), WORKERS_SUBDOMAIN (registers your one-time *.workers.dev name), or API_BASE_URL (an address you route yourself). The Worker itself is already deployed and the database is migrated."
             exit 1
           fi
           npm run build --workspace web
