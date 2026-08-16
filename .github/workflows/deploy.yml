@@ -108,11 +108,36 @@ jobs:
 
       - run: npm ci
 
+      # A custom domain serves from the root, a project Pages site from
+      # /<repo>/, and the router's basename follows Vite's base — get this
+      # wrong and every asset 404s. Read the domain GitHub already has
+      # configured rather than relying on a variable being kept in sync.
+      - name: Resolve the Pages domain
+        id: site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
+        run: |
+          DOMAIN="$CUSTOM_DOMAIN"
+          if [ -z "$DOMAIN" ]; then
+            DOMAIN=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+                          -H "Accept: application/vnd.github+json" \
+                          "https://api.github.com/repos/${{ github.repository }}/pages" 2>/dev/null \
+                     | python3 -c "import sys,json;print(json.load(sys.stdin).get('cname') or '')" 2>/dev/null || true)
+          fi
+          if [ -n "$DOMAIN" ]; then
+            echo "Publishing to https://$DOMAIN (base /)"
+            echo "domain=$DOMAIN" >> "$GITHUB_OUTPUT"
+            echo "base=/" >> "$GITHUB_OUTPUT"
+          else
+            echo "No custom domain — publishing to the project Pages path"
+            echo "domain=" >> "$GITHUB_OUTPUT"
+            echo "base=/${{ github.event.repository.name }}/" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build
         env:
-          # A custom domain serves from the root; a project Pages site serves
-          # from /<repo>/, and the router's basename follows Vite's base.
-          VITE_BASE: ${{ vars.CUSTOM_DOMAIN && '/' || format('/{0}/', github.event.repository.name) }}
+          VITE_BASE: ${{ steps.site.outputs.base }}
           VITE_API_BASE: ${{ needs.api.outputs.api_url }}
         run: |
           if [ -z "$VITE_API_BASE" ]; then
@@ -123,7 +148,7 @@ jobs:
 
       - name: Prepare Pages artifact
         env:
-          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
+          CUSTOM_DOMAIN: ${{ steps.site.outputs.domain }}
         run: |
           # Pages serves 404.html for unknown paths; handing it the SPA shell
           # makes client-side routes survive a hard refresh.
