@@ -990,7 +990,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 
 /* ============================================================ footer */
 
-.footer { background: var(--navy); color: #94a3b8; margin-top: 64px; padding: 44px 0 26px; }
+/* Extra bottom padding keeps the floating WhatsApp button off the last line. */
+.footer { background: var(--navy); color: #94a3b8; margin-top: 64px; padding: 44px 0 92px; }
 .footer h4 { color: #fff; font-size: 0.92rem; margin-bottom: 12px; }
 .footer a:hover { color: var(--gold); }
 .footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 30px; margin-bottom: 30px; }
@@ -1103,3 +1104,47 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   line-height: 0;
 }
 .pay-note { font-size: 0.76rem; color: #64748b; margin-top: 9px; }
+
+/* ============================================================ WhatsApp button */
+
+/* Sits above page content but below modals (200) and toasts (300), so it can
+   never cover a dialog the customer is trying to complete. */
+.wa-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 90;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px 13px 15px;
+  border-radius: 999px;
+  background: #25d366;
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.92rem;
+  box-shadow: 0 6px 20px rgba(37, 211, 102, 0.42), 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.wa-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px rgba(37, 211, 102, 0.5), 0 3px 8px rgba(0, 0, 0, 0.24);
+  color: #fff;
+}
+.wa-fab:active { transform: translateY(0); }
+
+/* Collapse to a circle on small screens so it never blocks the catalogue. */
+@media (max-width: 640px) {
+  .wa-fab { padding: 14px; right: 14px; bottom: 14px; }
+  .wa-fab-text { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wa-fab:hover { transform: none; }
+}
+
+/* ============================================================ contact block */
+
+.contact-list { display: grid; gap: 9px; font-size: 0.87rem; }
+.contact-list .row-i { display: flex; gap: 10px; align-items: flex-start; }
+.contact-list .ic { flex-shrink: 0; opacity: 0.85; }

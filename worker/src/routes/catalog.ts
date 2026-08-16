@@ -23,7 +23,9 @@ export const catalog = new Hono<{ Bindings: Env; Variables: Variables }>();
 catalog.get('/settings', async (c) => {
   const settings = await getSettings(c.env);
   const { results } = await c.env.DB.prepare(
-    "SELECT key, value FROM settings WHERE key IN ('store_name','store_tagline','support_phone','support_email')",
+    `SELECT key, value FROM settings
+      WHERE key IN ('store_name','store_tagline','support_phone','support_phone_2',
+                    'support_email','store_address','whatsapp_number')`,
   ).all<{ key: string; value: string }>();
   const info = Object.fromEntries((results ?? []).map((r) => [r.key, r.value]));
   return c.json({ ...settings, ...info });

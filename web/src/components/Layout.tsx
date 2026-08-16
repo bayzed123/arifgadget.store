@@ -6,6 +6,7 @@ import { useCart, useTheme } from '../lib/store';
 import type { Category, StoreSettings } from '../lib/types';
 import { Logo } from './Logo';
 import { PaymentBadges } from './PaymentBadges';
+import { WhatsAppButton } from './WhatsAppButton';
 
 export function Layout() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -57,7 +58,9 @@ export function Layout() {
             <span>📦 Ships in 48 hours</span>
           </span>
           <span className="row gap-12 wrap-row">
-            {settings?.support_phone && <a href={`tel:${settings.support_phone}`}>{settings.support_phone}</a>}
+            {settings?.support_phone && (
+              <a href={`tel:${settings.support_phone.replace(/\s|-/g, '')}`}>📞 {settings.support_phone}</a>
+            )}
             <Link to="/track">Track order</Link>
           </span>
         </div>
@@ -147,22 +150,47 @@ export function Layout() {
               </ul>
             </div>
             <div>
-              <h4>Support</h4>
-              <ul>
-                <li>
-                  <Link to="/track">Track your order</Link>
-                </li>
-                {settings?.support_email && (
-                  <li>
-                    <a href={`mailto:${settings.support_email}`}>{settings.support_email}</a>
-                  </li>
+              <h4>Visit or call us</h4>
+              <div className="contact-list">
+                {settings?.store_address && (
+                  <span className="row-i">
+                    <span className="ic" aria-hidden="true">
+                      📍
+                    </span>
+                    <span>{settings.store_address}</span>
+                  </span>
                 )}
                 {settings?.support_phone && (
-                  <li>
-                    <a href={`tel:${settings.support_phone}`}>{settings.support_phone}</a>
-                  </li>
+                  <span className="row-i">
+                    <span className="ic" aria-hidden="true">
+                      📞
+                    </span>
+                    <a href={`tel:${settings.support_phone.replace(/\s|-/g, '')}`}>{settings.support_phone}</a>
+                  </span>
                 )}
-              </ul>
+                {settings?.support_phone_2 && (
+                  <span className="row-i">
+                    <span className="ic" aria-hidden="true">
+                      📱
+                    </span>
+                    <a href={`tel:${settings.support_phone_2.replace(/\s|-/g, '')}`}>{settings.support_phone_2}</a>
+                  </span>
+                )}
+                {settings?.support_email && (
+                  <span className="row-i">
+                    <span className="ic" aria-hidden="true">
+                      ✉️
+                    </span>
+                    <a href={`mailto:${settings.support_email}`}>{settings.support_email}</a>
+                  </span>
+                )}
+                <span className="row-i">
+                  <span className="ic" aria-hidden="true">
+                    🚚
+                  </span>
+                  <Link to="/track">Track your order</Link>
+                </span>
+              </div>
             </div>
             <div>
               <h4>Business</h4>
@@ -187,6 +215,8 @@ export function Layout() {
           </div>
         </div>
       </footer>
+
+      <WhatsAppButton number={settings?.whatsapp_number} storeName={settings?.store_name} />
     </>
   );
 }

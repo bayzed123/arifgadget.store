@@ -62,7 +62,10 @@ export interface StoreSettings {
   store_name?: string;
   store_tagline?: string;
   support_phone?: string;
+  support_phone_2?: string;
   support_email?: string;
+  store_address?: string;
+  whatsapp_number?: string;
 }
 
 export interface QuoteLine {

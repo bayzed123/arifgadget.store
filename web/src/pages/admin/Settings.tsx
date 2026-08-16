@@ -20,7 +20,10 @@ const MONEY_KEYS = new Set(['shipping_flat', 'free_shipping_over']);
 const LABELS: Record<string, { label: string; hint: string }> = {
   store_name: { label: 'Store name', hint: 'Shown in the API and page titles' },
   store_tagline: { label: 'Tagline', hint: 'Short line under the logo' },
-  support_phone: { label: 'Support phone', hint: 'Displayed in the header and footer' },
+  store_address: { label: 'Shop address', hint: 'Shown in the footer so customers can visit' },
+  support_phone: { label: 'Main phone', hint: 'Displayed in the header bar and footer' },
+  support_phone_2: { label: 'Second phone', hint: 'Optional extra number in the footer' },
+  whatsapp_number: { label: 'WhatsApp number', hint: 'The floating chat button opens a chat with this number' },
   support_email: { label: 'Support email', hint: 'Displayed in the footer' },
   currency: { label: 'Currency code', hint: 'e.g. BDT' },
   currency_symbol: { label: 'Currency symbol', hint: 'e.g. ৳' },
