@@ -27,6 +27,11 @@ const LABELS: Record<string, { label: string; hint: string }> = {
   support_phone_2: { label: 'Second phone', hint: 'Optional extra number in the footer' },
   whatsapp_number: { label: 'WhatsApp number', hint: 'The floating chat button opens a chat with this number' },
   support_email: { label: 'Support email', hint: 'Displayed in the footer' },
+  bkash_number: { label: 'bKash number', hint: 'Shown to the customer when they choose bKash' },
+  nagad_number: { label: 'Nagad number', hint: 'Shown to the customer when they choose Nagad' },
+  rocket_number: { label: 'Rocket number', hint: 'Shown to the customer when they choose Rocket' },
+  bank_details: { label: 'Bank transfer details', hint: 'Shown when the customer chooses bank transfer' },
+  order_whatsapp: { label: 'Order WhatsApp number', hint: 'Where the "Send order on WhatsApp" button sends orders, e.g. 8801400290828' },
   currency: { label: 'Currency code', hint: 'e.g. BDT' },
   currency_symbol: { label: 'Currency symbol', hint: 'e.g. ৳' },
   shipping_dhaka: { label: 'Delivery inside Dhaka (৳)', hint: 'Charged when the shopper picks "Inside Dhaka"' },
@@ -130,13 +135,15 @@ export function Settings() {
             <div className="alert warn small">
               A ৳1,000 order currently pays{' '}
               <strong>
-                {Number(values.free_shipping_over ?? 0) * 100 <= 100000
+                {Number(values.free_shipping_over) > 0 && Number(values.free_shipping_over) <= 1000
                   ? 'free delivery'
                   : `${money(Math.round((Number(values.shipping_dhaka) || 0) * 100))} inside Dhaka, ` +
                     `${money(Math.round((Number(values.shipping_outside) || 0) * 100))} elsewhere`}
               </strong>
-              . Free delivery unlocks at {money(Math.round((Number(values.free_shipping_over) || 0) * 100))} —
-              set that to 0 to charge delivery on every order.
+              .{' '}
+              {Number(values.free_shipping_over) > 0
+                ? `Free delivery unlocks at ${money(Math.round(Number(values.free_shipping_over) * 100))}.`
+                : 'Free delivery is switched off, so every order pays the charge.'}
             </div>
 
             {error && <div className="alert error">{error}</div>}

@@ -21,10 +21,45 @@ const PAYMENTS = [
   { key: 'bank', label: 'Bank transfer', hint: 'For wholesale accounts' },
 ];
 
+/** Which methods need the shop's number and a transaction ID back. */
+const MOBILE_BANKING = ['bkash', 'nagad', 'rocket'];
+
 interface Placed {
   order_no: string;
   total: number;
   status: string;
+}
+
+/**
+ * The order as a WhatsApp message. The shop has no inbox to watch, so the
+ * fastest reliable notification is the customer forwarding the order to the
+ * shop's number the moment it is placed.
+ */
+function whatsappMessage(args: {
+  order: Placed;
+  form: Record<string, string>;
+  lines: { qty: number; name: string; line_total: number }[];
+  shipping: number;
+  zone: DeliveryZone;
+}): string {
+  const { order, form, lines, shipping, zone } = args;
+  const rows = lines.map((l) => `• ${l.qty} × ${l.name} — ${money(l.line_total)}`).join('\n');
+  return [
+    `*New order ${order.order_no}*`,
+    '',
+    rows,
+    '',
+    `Delivery (${zone === 'dhaka' ? 'inside Dhaka' : 'outside Dhaka'}): ${shipping === 0 ? 'Free' : money(shipping)}`,
+    `*Total: ${money(order.total)}*`,
+    '',
+    `Name: ${form.customer_name}`,
+    `Phone: ${form.customer_phone}`,
+    `Address: ${form.address}, ${form.city}`,
+    `Payment: ${form.payment_method.toUpperCase()}${form.payment_reference ? ` — TrxID ${form.payment_reference}` : ''}`,
+    form.note ? `Note: ${form.note}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export function Checkout() {
@@ -58,6 +93,7 @@ export function Checkout() {
     city: '',
     note: '',
     payment_method: 'cod',
+    payment_reference: '',
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -76,6 +112,16 @@ export function Checkout() {
 
   const [error, setError] = useState('');
   const [placed, setPlaced] = useState<Placed | null>(null);
+
+  /** The shop's receiving number for whichever mobile-banking method is picked. */
+  const payNumber =
+    form.payment_method === 'bkash'
+      ? settings?.bkash_number
+      : form.payment_method === 'nagad'
+        ? settings?.nagad_number
+        : form.payment_method === 'rocket'
+          ? settings?.rocket_number
+          : '';
 
   function set(field: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -110,6 +156,17 @@ export function Checkout() {
   }
 
   if (placed) {
+    const shopNumber = (settings?.order_whatsapp || '8801400290828').replace(/\D/g, '');
+    const waHref = `https://wa.me/${shopNumber}?text=${encodeURIComponent(
+      whatsappMessage({
+        order: placed,
+        form,
+        lines: (quote?.lines ?? []).map((l) => ({ qty: l.qty, name: l.name, line_total: l.line_total })),
+        shipping: quote?.shipping ?? 0,
+        zone,
+      }),
+    )}`;
+
     return (
       <div className="panel" style={{ maxWidth: 560, margin: '20px auto', textAlign: 'center' }}>
         <div className="panel-body" style={{ padding: 36 }}>
@@ -138,10 +195,34 @@ export function Checkout() {
 
           <p className="small muted">Keep this number — you will need it with your phone number to track the order.</p>
 
-          <div className="row gap-8" style={{ justifyContent: 'center', marginTop: 18 }}>
+          <a
+            className="btn whatsapp lg block"
+            href={waHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ marginTop: 4 }}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+              <path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.38-1.47-.88-.78-1.47-1.75-1.64-2.05-.17-.3-.02-.46.13-.6.13-.14.3-.35.44-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.01-1.04 2.470 1.44 1.09 2.83 1.24 3.03.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.7.63.71.23 1.36.19 1.87.12.57-.09 1.75-.72 2-1.41.25-.69.25-1.28.17-1.41-.07-.13-.27-.2-.57-.35z" />
+              <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.46 1.32 4.96L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm0 18.02h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.83 2.42a8.19 8.19 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23Z" />
+            </svg>
+            Send order details on WhatsApp
+          </a>
+          <p className="tiny dim" style={{ marginTop: 8 }}>
+            This opens WhatsApp with your order already written out — just press send. It reaches the shop
+            straight away.
+          </p>
+
+          <div className="row gap-8 wrap-row" style={{ justifyContent: 'center', marginTop: 18 }}>
             <button className="btn primary" onClick={() => navigate(`/track?order=${placed.order_no}`)}>
               Track order
             </button>
+            <Link
+              to={`/invoice/${placed.order_no}?phone=${encodeURIComponent(form.customer_phone)}`}
+              className="btn dark"
+            >
+              🧾 Invoice
+            </Link>
             <Link to="/catalog" className="btn ghost">
               Keep shopping
             </Link>
@@ -367,6 +448,64 @@ export function Checkout() {
                   </label>
                 ))}
               </div>
+
+              {MOBILE_BANKING.includes(form.payment_method) && (
+                <div className="pay-instructions">
+                  <h4>
+                    How to pay with {PAYMENTS.find((p) => p.key === form.payment_method)?.label}
+                  </h4>
+                  <ol className="guide-steps" style={{ marginTop: 10 }}>
+                    <li>
+                      Open your {PAYMENTS.find((p) => p.key === form.payment_method)?.label} app and choose{' '}
+                      <strong>Send Money</strong>.
+                    </li>
+                    <li>
+                      Send{' '}
+                      <strong className="num">{quote ? money(quote.total) : '—'}</strong> to{' '}
+                      <strong className="mono">{payNumber || 'ask us for the number'}</strong>.
+                    </li>
+                    <li>Copy the Transaction ID (TrxID) from the confirmation message.</li>
+                    <li>Paste it below so we can match your payment to this order.</li>
+                  </ol>
+                  <div className="field" style={{ marginTop: 12 }}>
+                    <label htmlFor="trx">Transaction ID (TrxID)</label>
+                    <input
+                      id="trx"
+                      className="input mono"
+                      maxLength={80}
+                      placeholder="e.g. 9F7GH2KL01"
+                      value={form.payment_reference}
+                      onChange={(e) => set('payment_reference', e.target.value)}
+                    />
+                    <span className="hint">
+                      You can place the order first and send us the TrxID on WhatsApp afterwards.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {form.payment_method === 'bank' && settings?.bank_details && (
+                <div className="pay-instructions">
+                  <h4>Bank transfer</h4>
+                  <p className="small">{settings.bank_details}</p>
+                  <div className="field" style={{ marginTop: 12 }}>
+                    <label htmlFor="trx-bank">Payment reference</label>
+                    <input
+                      id="trx-bank"
+                      className="input"
+                      maxLength={80}
+                      value={form.payment_reference}
+                      onChange={(e) => set('payment_reference', e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {form.payment_method === 'cod' && (
+                <p className="small muted" style={{ marginTop: 12 }}>
+                  Pay the courier in cash when your parcel arrives. Nothing to send in advance.
+                </p>
+              )}
             </div>
           </div>
         </div>

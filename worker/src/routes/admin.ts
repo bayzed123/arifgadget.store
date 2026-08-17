@@ -532,7 +532,7 @@ admin.get('/orders', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT o.id, o.order_no, o.customer_name, o.customer_phone, o.city, o.status,
             o.subtotal, o.discount, o.shipping, o.tax, o.total, o.cost_total, o.profit,
-            o.margin_pct, o.payment_method, o.created_at,
+            o.margin_pct, o.payment_method, o.payment_reference, o.delivery_zone, o.created_at,
             (SELECT COALESCE(SUM(qty),0) FROM order_items WHERE order_id = o.id) AS units
        FROM orders o WHERE ${whereSql}
       ORDER BY o.created_at DESC LIMIT ? OFFSET ?`,

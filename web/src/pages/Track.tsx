@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useCustomer } from '../lib/store';
 import { dateTime, DELIVERY_STAGES, money, orderStatus, ORDER_STATUS_TONE, REVERSED_STATUSES } from '../lib/format';
@@ -124,9 +124,17 @@ export function Track() {
               <span className="eyebrow">Order</span>
               <h3 className="mono">{result.order.order_no}</h3>
             </div>
-            <span className={`badge ${ORDER_STATUS_TONE[result.order.status] ?? 'info'}`}>
-              <span className="dot" /> {orderStatus(result.order.status)}
-            </span>
+            <div className="row gap-8 wrap-row">
+              <span className={`badge ${ORDER_STATUS_TONE[result.order.status] ?? 'info'}`}>
+                <span className="dot" /> {orderStatus(result.order.status)}
+              </span>
+              <Link
+                className="btn ghost sm"
+                to={`/invoice/${result.order.order_no}?phone=${encodeURIComponent(phone.trim())}`}
+              >
+                🧾 Invoice
+              </Link>
+            </div>
           </div>
 
           <div className="panel-body stack gap-24">

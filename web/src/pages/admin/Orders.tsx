@@ -186,7 +186,10 @@ export function Orders() {
                         <td className="num">{number(order.units)}</td>
                         <td className="num">
                           <strong>{money(order.total)}</strong>
-                          <div className="tiny dim">{order.payment_method.toUpperCase()}</div>
+                          <div className="tiny dim">
+                            {order.payment_method.toUpperCase()}
+                            {order.payment_reference ? ` · ${order.payment_reference}` : ''}
+                          </div>
                         </td>
                         <td className="num">
                           <strong style={{ color: order.profit >= 0 ? 'var(--good)' : 'var(--bad)' }}>

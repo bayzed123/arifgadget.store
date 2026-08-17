@@ -125,7 +125,12 @@ export function computeCart(
   const cappedDiscount = Math.min(Math.max(discount, 0), subtotal);
   const net = subtotal - cappedDiscount;
 
-  const free_shipping_applied = net >= settings.free_shipping_over && net > 0;
+  // A threshold of 0 means "no free delivery, charge every order". Without the
+  // first clause `net >= 0` is true for every basket and the shop ships the
+  // whole country free — which is the opposite of what setting it to 0 reads
+  // like, and cost real money before it was caught.
+  const free_shipping_applied =
+    settings.free_shipping_over > 0 && net >= settings.free_shipping_over && net > 0;
   const shipping = net === 0 || free_shipping_applied ? 0 : shippingRate(settings, zone);
   const tax = Math.round((net * settings.tax_pct) / 100);
   const total = net + shipping + tax;
@@ -145,7 +150,10 @@ export function computeCart(
     units,
     delivery_zone: zone,
     free_shipping_applied,
-    free_shipping_gap: free_shipping_applied ? 0 : Math.max(settings.free_shipping_over - net, 0),
+    free_shipping_gap:
+      free_shipping_applied || settings.free_shipping_over <= 0
+        ? 0
+        : Math.max(settings.free_shipping_over - net, 0),
   };
 }
 

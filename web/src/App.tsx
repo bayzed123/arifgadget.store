@@ -11,6 +11,7 @@ import { ContentPage } from './pages/ContentPage';
 import { Blog, BlogPost } from './pages/Blog';
 import { Press } from './pages/Press';
 import { Account } from './pages/Account';
+import { Invoice } from './pages/Invoice';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { Dashboard } from './pages/admin/Dashboard';
 import { Products } from './pages/admin/Products';
@@ -44,6 +45,7 @@ export function App() {
                 <Route path="blog/:slug" element={<BlogPost />} />
                 <Route path="press" element={<Press />} />
                 <Route path="account" element={<Account />} />
+                <Route path="invoice/:orderNo" element={<Invoice />} />
               </Route>
 
               <Route path="/admin" element={<AdminLayout />}>

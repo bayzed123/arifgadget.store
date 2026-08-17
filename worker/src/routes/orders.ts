@@ -128,6 +128,8 @@ orders.post('/orders', async (c) => {
   const address = requireString(body.address, 'address', 400);
   const city = requireString(body.city, 'city', 80);
   const note = optionalString(body.note, '', 500);
+  // bKash/Nagad/Rocket TrxID or a bank reference — the shopper's proof of payment.
+  const payment_reference = optionalString(body.payment_reference, '', 80);
   const payment_method = ['cod', 'bkash', 'nagad', 'rocket', 'bank'].includes(String(body.payment_method))
     ? String(body.payment_method)
     : 'cod';
@@ -159,8 +161,8 @@ orders.post('/orders', async (c) => {
     c.env.DB.prepare(
       `INSERT INTO orders (order_no, customer_name, customer_phone, customer_email, address, city,
                            note, payment_method, status, discount, shipping, tax, customer_id,
-                           delivery_zone)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+                           delivery_zone, payment_reference)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
     ).bind(
       orderNo,
       customer_name,
@@ -175,6 +177,7 @@ orders.post('/orders', async (c) => {
       totals.tax,
       customer?.sub ?? null,
       delivery_zone,
+      payment_reference,
     ),
     ...totals.lines.map((line) => {
       const product = byId.get(line.product_id)!;
@@ -229,8 +232,9 @@ orders.get('/orders/:orderNo', async (c) => {
   const placeholders = variants.map(() => '?').join(', ');
 
   const order = await c.env.DB.prepare(
-    `SELECT order_no, customer_name, city, status, subtotal, discount, shipping, tax, total,
-            payment_method, delivery_zone, created_at, updated_at
+    `SELECT order_no, customer_name, customer_phone, address, city, note, status,
+            subtotal, discount, shipping, tax, total,
+            payment_method, payment_reference, delivery_zone, created_at, updated_at
        FROM orders
       WHERE upper(order_no) = ?
         AND ${digitsSql('customer_phone')} IN (${placeholders})`,

@@ -256,6 +256,14 @@ function Dashboard() {
                         <span className={`badge ${ORDER_STATUS_TONE[order.status] ?? 'info'}`}>
                           <span className="dot" /> {orderStatus(order.status)}
                         </span>
+                        <div className="tiny" style={{ marginTop: 4 }}>
+                          <Link
+                            to={`/invoice/${order.order_no}?phone=${encodeURIComponent(customer?.phone ?? '')}`}
+                            style={{ textDecoration: 'underline' }}
+                          >
+                            Invoice
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -278,6 +278,36 @@ things happen by themselves:
 You never have to adjust stock by hand after a return or cancellation — and if
 you do, you will double-count.
 
+### Payment proof
+
+When a customer picks bKash, Nagad or Rocket, the checkout shows your number
+for that provider, the exact amount to send, and a box for the **TrxID** from
+their confirmation SMS. Whatever they type appears next to the payment method
+on the **Orders** page, so you can match a payment to an order without asking.
+
+### Every order arrives on WhatsApp
+
+The moment an order is placed, the confirmation screen shows a green **Send
+order details on WhatsApp** button. It opens WhatsApp with the whole order
+already written out — items, quantities, delivery zone and charge, total,
+name, phone, address, payment method and TrxID — addressed to your **Order
+WhatsApp number**. The customer just presses send.
+
+That is the fastest reliable way for you to hear about an order without
+watching the dashboard. Orders are of course also in **Orders** either way;
+the WhatsApp message is a notification, not the record.
+
+### Invoices
+
+Every order has a printable invoice at **🧾 Invoice**, reachable from the order
+confirmation screen, the tracking page and the customer's account history. It
+carries your shop details, the line items, the delivery zone and charge, the
+payment method and TrxID, and the grand total.
+
+**Print / Save as PDF** uses the phone or computer's own print dialog, so the
+customer can keep a PDF as proof of purchase. Only someone with both the order
+number and the phone number on the order can open it.
+
 ### Finding an order
 
 Use the search box for an order number, customer name or phone number. The
@@ -312,7 +342,10 @@ status buttons filter the list.
 | **Currency code / symbol** | `BDT` and `৳` by default. |
 | **Delivery inside Dhaka** | Charged when the shopper picks *Inside Dhaka* at checkout. Currently ৳90. |
 | **Delivery outside Dhaka** | Charged everywhere else in Bangladesh. Currently ৳130. |
-| **Free delivery over** | Order value that makes delivery free. A progress bar in the cart nudges customers toward it. **Set this to `0` if you want every order to pay the ৳90 / ৳130 charge.** |
+| **Free delivery over** | Order value that makes delivery free. A progress bar in the cart nudges customers toward it. Set it to `0` to switch free delivery off completely, so every order pays the ৳90 / ৳130 charge. |
+| **bKash / Nagad / Rocket number** | Shown to the customer, with step-by-step instructions, when they pick that method at checkout. |
+| **Bank transfer details** | Shown when a customer picks bank transfer. |
+| **Order WhatsApp number** | Where the *Send order details on WhatsApp* button sends orders. Full international form, e.g. `8801400290828`. |
 | **Tax percentage** | Applied to the order value. Leave at `0` if you do not charge tax. |
 
 Enter money in taka — the system stores it precisely behind the scenes.

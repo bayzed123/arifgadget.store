@@ -56,6 +56,11 @@ export interface AdminProduct extends Product {
 export interface StoreSettings {
   currency: string;
   currency_symbol: string;
+  bkash_number?: string;
+  nagad_number?: string;
+  rocket_number?: string;
+  bank_details?: string;
+  order_whatsapp?: string;
   shipping_dhaka: number;
   shipping_outside: number;
   free_shipping_over: number;
@@ -107,6 +112,8 @@ export interface Quote {
 }
 
 export interface AdminOrder {
+  payment_reference?: string;
+  delivery_zone?: string;
   id: number;
   order_no: string;
   customer_name: string;

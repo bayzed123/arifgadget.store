@@ -159,6 +159,28 @@ async function main() {
   const noAuthAnalytics = await api('/api/admin/analytics/overview');
   check('analytics rejects anonymous callers', noAuthAnalytics.status === 401, `status ${noAuthAnalytics.status}`);
 
+  console.log('\nFree-delivery threshold');
+  // A threshold of 0 must mean "always charge", not "everything is free".
+  const priorThreshold = (await api('/api/settings', { expect: 200 })).body.free_shipping_over;
+  await api('/api/admin/settings', { method: 'PATCH', auth: true, body: { free_shipping_over: 0 } });
+  try {
+    const zeroSmall = await api('/api/quote', {
+      method: 'POST', expect: 200,
+      body: { items: [{ product_id: band.id, qty: 1 }], delivery_zone: 'dhaka' },
+    });
+    check('threshold 0 still charges a small order', zeroSmall.body.shipping === 9000, `got ${zeroSmall.body.shipping}`);
+    check('threshold 0 never says free', zeroSmall.body.free_shipping_applied === false);
+    check('threshold 0 shows no "spend more" gap', zeroSmall.body.free_shipping_gap === 0);
+
+    const zeroBig = await api('/api/quote', {
+      method: 'POST', expect: 200,
+      body: { items: [{ product_id: band.id, qty: 40 }], delivery_zone: 'outside' },
+    });
+    check('threshold 0 charges a big order too', zeroBig.body.shipping === 13000, `got ${zeroBig.body.shipping}`);
+  } finally {
+    await api('/api/admin/settings', { method: 'PATCH', auth: true, body: { free_shipping_over: priorThreshold } });
+  }
+
   // ---------------------------------------------------------- product management
   console.log('\nProduct management');
   const adminList = await api('/api/admin/products?limit=5', { auth: true, expect: 200 });
@@ -383,6 +405,44 @@ async function main() {
   })).status === 409);
 
   await api(`/api/admin/products/${shelfProduct.id}`, { method: 'DELETE', auth: true, expect: 200 });
+
+  // ---------------------------------------- payment details and the invoice
+  console.log('\nPayment details and invoice');
+  const payCfg = await api('/api/settings', { expect: 200 });
+  check('the shop publishes its bKash number', Boolean(payCfg.body.bkash_number), payCfg.body.bkash_number);
+  check('the shop publishes its Nagad number', Boolean(payCfg.body.nagad_number));
+  check('the shop publishes its Rocket number', Boolean(payCfg.body.rocket_number));
+  check('an order WhatsApp number is configured', Boolean(payCfg.body.order_whatsapp), payCfg.body.order_whatsapp);
+
+  const trx = `TRX${Date.now().toString(36).toUpperCase()}`;
+  const paid = await api('/api/orders', {
+    method: 'POST', expect: 201,
+    body: {
+      customer_name: 'Invoice Test', customer_phone: '01555333444',
+      address: '5 Invoice Road', city: 'Dhaka', delivery_zone: 'dhaka',
+      payment_method: 'bkash', payment_reference: trx, note: 'Please call before delivery',
+      // One band stays under the free-delivery threshold, so the zone rate is
+      // the thing actually being asserted below.
+      items: [{ product_id: band.id, qty: 1 }],
+    },
+  });
+  const invNo = paid.body.order.order_no;
+
+  const invoice = await api(`/api/orders/${invNo}?phone=01555333444`, { expect: 200 });
+  check('the invoice carries the TrxID', invoice.body.order.payment_reference === trx, invoice.body.order.payment_reference);
+  check('the invoice carries the payment method', invoice.body.order.payment_method === 'bkash');
+  check('the invoice carries the delivery zone', invoice.body.order.delivery_zone === 'dhaka');
+  check('the invoice charges the Dhaka rate', invoice.body.order.shipping === 9000, `got ${invoice.body.order.shipping}`);
+  check('the invoice carries the address', invoice.body.order.address === '5 Invoice Road');
+  check('the invoice carries the note', invoice.body.order.note === 'Please call before delivery');
+  check('the invoice lists its items', invoice.body.items.length === 1 && invoice.body.items[0].qty === 1);
+  check('the invoice total adds up',
+    invoice.body.order.total === invoice.body.order.subtotal - invoice.body.order.discount +
+      invoice.body.order.shipping + invoice.body.order.tax,
+    `${taka(invoice.body.order.total)}`);
+
+  const adminView = (await api(`/api/admin/orders?q=${invNo}`, { auth: true, expect: 200 })).body.orders[0];
+  check('the dashboard shows the TrxID', adminView.payment_reference === trx);
 
   // ------------------------------------------- delivery checkpoint pipeline
   // pending → confirmed → shipped ("On the way") → delivered, with returned
