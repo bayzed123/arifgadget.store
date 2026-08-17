@@ -243,32 +243,40 @@ You cannot edit stock any other way, which is what keeps the ledger honest.
 **Orders** lists every order, newest first. Click the order number to expand it
 and see the line items, what each cost you, and the profit on each line.
 
-### The stages
+### The five delivery checkpoints
 
-| Stage | Meaning |
+Orders move through the checkpoints a courier uses, and the customer sees
+exactly these on the tracking page.
+
+| Checkpoint | Meaning |
 |---|---|
 | **Pending** | Just placed. Stock is already reserved. **Not yet counted as revenue.** |
-| **Confirmed** | You called the customer and they confirmed. **Revenue starts counting here.** |
-| **Packed** | Boxed and labelled. |
-| **Shipped** | Handed to the courier. |
-| **Delivered** | Customer received it. Order complete. |
-| **Cancelled** | Order dropped. **All units go back into stock automatically.** |
-| **Refunded** | Money returned after delivery. **Units go back into stock automatically.** |
+| **Order confirmed** | You called the customer and they confirmed. **Revenue and profit start counting here.** |
+| **On the way** | Handed to the courier, in transit. |
+| **Delivered** | Customer received it. The sale is complete. |
+| **Returned** | The parcel came back. **All units return to stock and the money leaves revenue.** |
+| **Cancelled** | Called off before dispatch. **Units return to stock; nothing is counted as income.** |
 
-The blue button on each row moves the order to its next stage. Work left to
-right: Confirm → Packed → Shipped → Delivered.
+The orange button on each row moves the order to its next checkpoint. Work left
+to right: Order confirmed → On the way → Delivered.
 
-### Cancelling and refunding
+**Cancel** only appears while an order is *Pending* or *Order confirmed* —
+before the goods leave the shop. **Returned** only appears once it is *On the
+way* or *Delivered* — after the goods have gone. Checkpoints cannot be skipped
+or rewound, and *Returned* and *Cancelled* are final: both have already put
+stock back, so moving the order again would count those units twice.
 
-Click **Cancel** (or **Refund** on a delivered order) and confirm. Three things
-happen by themselves:
+### Returns and cancellations
+
+Click **Cancel** (or **Returned** on a dispatched order) and confirm. Three
+things happen by themselves:
 
 1. Every unit returns to stock.
 2. The stock ledger records the return with the order number.
 3. The order drops out of revenue and profit.
 
-You never have to adjust stock by hand after a cancellation — and if you do,
-you will double-count.
+You never have to adjust stock by hand after a return or cancellation — and if
+you do, you will double-count.
 
 ### Finding an order
 

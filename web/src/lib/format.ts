@@ -70,9 +70,35 @@ export function dayLabel(day: string): string {
 export const ORDER_STATUS_TONE: Record<string, 'ok' | 'low' | 'out' | 'info' | 'brand'> = {
   pending: 'low',
   confirmed: 'brand',
-  packed: 'brand',
   shipped: 'info',
   delivered: 'ok',
-  cancelled: 'out',
   refunded: 'out',
+  cancelled: 'out',
+  // Retired checkpoint, kept so any historical row still renders a sane badge.
+  packed: 'brand',
 };
+
+/**
+ * The five delivery checkpoints in order. `shipped` is stored short but always
+ * reads as "On the way" — courier language the shop and the buyer share.
+ */
+export const DELIVERY_STAGES = ['pending', 'confirmed', 'shipped', 'delivered'] as const;
+
+/** Checkpoints that end an order and send its stock back to the shelf. */
+export const REVERSED_STATUSES = ['refunded', 'cancelled'];
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending',
+  confirmed: 'Order confirmed',
+  shipped: 'On the way',
+  delivered: 'Delivered',
+  // Stored as 'refunded' since the first migration; a return is what it means.
+  refunded: 'Returned',
+  cancelled: 'Cancelled',
+  packed: 'Packed',
+};
+
+/** Human label for a stored status. Falls back to the raw value. */
+export function orderStatus(status: string): string {
+  return STATUS_LABELS[status] ?? status;
+}

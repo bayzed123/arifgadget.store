@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useCustomer } from '../lib/store';
-import { dateTime, money, ORDER_STATUS_TONE } from '../lib/format';
+import { dateTime, DELIVERY_STAGES, money, orderStatus, ORDER_STATUS_TONE, REVERSED_STATUSES } from '../lib/format';
 import { ProductThumb } from '../components/ProductThumb';
 
 interface TrackedOrder {
@@ -29,7 +29,6 @@ interface TrackedItem {
   line_total: number;
 }
 
-const STAGES = ['pending', 'confirmed', 'packed', 'shipped', 'delivered'];
 
 export function Track() {
   const [params, setParams] = useSearchParams();
@@ -69,8 +68,8 @@ export function Track() {
     }
   }
 
-  const stageIndex = result ? STAGES.indexOf(result.order.status) : -1;
-  const reversed = result ? ['cancelled', 'refunded'].includes(result.order.status) : false;
+  const stageIndex = result ? DELIVERY_STAGES.indexOf(result.order.status as never) : -1;
+  const reversed = result ? REVERSED_STATUSES.includes(result.order.status) : false;
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -126,19 +125,19 @@ export function Track() {
               <h3 className="mono">{result.order.order_no}</h3>
             </div>
             <span className={`badge ${ORDER_STATUS_TONE[result.order.status] ?? 'info'}`}>
-              <span className="dot" /> {result.order.status}
+              <span className="dot" /> {orderStatus(result.order.status)}
             </span>
           </div>
 
           <div className="panel-body stack gap-24">
             {reversed ? (
               <div className="alert warn">
-                This order was {result.order.status}. Any stock has been returned to inventory. Call support if
-                that looks wrong.
+                This order was {orderStatus(result.order.status).toLowerCase()}. Every unit has gone back into
+                stock. Call support if that looks wrong.
               </div>
             ) : (
               <ol className="row wrap-row gap-4" style={{ listStyle: 'none', padding: 0 }}>
-                {STAGES.map((stage, index) => {
+                {DELIVERY_STAGES.map((stage, index) => {
                   const done = index <= stageIndex;
                   return (
                     <li key={stage} className="grow" style={{ minWidth: 88 }}>
@@ -155,10 +154,9 @@ export function Track() {
                         style={{
                           fontWeight: done ? 800 : 600,
                           color: done ? 'var(--ink)' : 'var(--ink-3)',
-                          textTransform: 'capitalize',
                         }}
                       >
-                        {stage}
+                        {orderStatus(stage)}
                       </span>
                     </li>
                   );

@@ -1,0 +1,22 @@
+-- Courier-style delivery checkpoints.
+--
+--   Pending → Order confirmed → On the way → Delivered
+--   with Returned and Cancelled as the two exits that put stock back.
+--
+-- Deliberately a data-only migration. `orders.status` carries a CHECK
+-- constraint from 0001, and SQLite cannot alter one without rebuilding the
+-- table — a rebuild that would have to carry generated columns, three
+-- triggers and a cascading foreign key from order_items, on a database
+-- holding the shop's real orders. Not worth the risk for a spelling.
+--
+-- So the checkpoints reuse values the constraint already allows:
+--   'shipped'  is shown as "On the way"
+--   'refunded' is shown as "Returned"
+-- Both already behave correctly — `refunded` restocks via trg_orders_restock
+-- and is excluded from counts_as_sale, which is exactly what a return needs.
+-- The labels live in web/src/lib/format.ts; the admin API refuses the two
+-- retired checkpoints so no new order can ever land on them.
+
+-- 'packed' is retired: move anything sitting there to the nearest live
+-- checkpoint so no order is stranded mid-pipeline.
+UPDATE orders SET status = 'confirmed' WHERE status = 'packed';

@@ -281,9 +281,16 @@ async function main() {
   const cats = await api('/api/admin/analytics/categories', { auth: true, expect: 200 });
   check('category breakdown returned', cats.body.categories.length >= 8);
 
+  // Empty the test product so the alert being asserted is one this run created,
+  // rather than depending on whatever the shop happens to be short of today.
+  await api(`/api/admin/products/${newId}/stock`, {
+    method: 'POST', auth: true, expect: 200,
+    body: { set: 0, reason: 'adjustment', note: 'Smoke test: force an out-of-stock alert' },
+  });
+
   const inv = await api('/api/admin/analytics/inventory', { auth: true, expect: 200 });
   check('low-stock alerts returned', Array.isArray(inv.body.alerts));
-  check('out-of-stock product flagged', inv.body.alerts.some((a) => a.stock_state === 'out'));
+  check('out-of-stock product flagged', inv.body.alerts.some((a) => a.id === newId && a.stock_state === 'out'));
   check('recent movements returned', inv.body.recent_movements.length > 0);
 
   // ---------------------------------------------------------- cancel + restock
@@ -307,6 +314,68 @@ async function main() {
 
   const audit = await api('/api/admin/audit?limit=10', { auth: true, expect: 200 });
   check('audit trail recorded', audit.body.entries.length > 0);
+
+  // ------------------------------------------- delivery checkpoint pipeline
+  // pending → confirmed → shipped ("On the way") → delivered, with returned
+  // and cancelled as the two exits that put stock back.
+  console.log('\nDelivery checkpoints');
+  const cpProduct = (await api('/api/products/xiaomi-smart-band-9', { expect: 200 })).body.product;
+  const cpStockBefore = (await api(`/api/admin/products/${cpProduct.id}`, { auth: true })).body.product.stock;
+
+  const cpOrder = await api('/api/orders', {
+    method: 'POST', expect: 201,
+    body: {
+      customer_name: 'Checkpoint Test', customer_phone: '01555000111',
+      address: '9 Courier Road', city: 'Dhaka',
+      items: [{ product_id: cpProduct.id, qty: 4 }],
+    },
+  });
+  const cpAdmin = (await api(`/api/admin/orders?q=${cpOrder.body.order.order_no}`, { auth: true })).body.orders[0];
+  const move = (status) =>
+    api(`/api/admin/orders/${cpAdmin.id}`, { method: 'PATCH', auth: true, body: { status } });
+
+  const cpStockAfterOrder = (await api(`/api/admin/products/${cpProduct.id}`, { auth: true })).body.product.stock;
+  check('ordering takes the units off the shelf', cpStockAfterOrder === cpStockBefore - 4,
+    `${cpStockBefore} → ${cpStockAfterOrder}`);
+  check('a new order starts at pending', cpAdmin.status === 'pending', cpAdmin.status);
+
+  check('cannot skip straight to delivered', (await move('delivered')).status === 400);
+  check('cannot skip straight to on the way', (await move('shipped')).status === 400);
+  check('retired "packed" is refused', (await move('packed')).status === 400);
+
+  check('pending → confirmed', (await move('confirmed')).status === 200);
+  const cpConfirmed = await api('/api/admin/analytics/overview?days=30', { auth: true, expect: 200 });
+  check('confirming books the revenue', cpConfirmed.body.sales.revenue > 0);
+
+  check('confirmed → on the way', (await move('shipped')).status === 200);
+  check('on the way → delivered', (await move('delivered')).status === 200);
+  check('a delivered order cannot be cancelled', (await move('cancelled')).status === 400);
+
+  const cpStockDelivered = (await api(`/api/admin/products/${cpProduct.id}`, { auth: true })).body.product.stock;
+  check('stock stays off the shelf through delivery', cpStockDelivered === cpStockBefore - 4,
+    `${cpStockDelivered}`);
+
+  const revenueBeforeReturn = (await api('/api/admin/analytics/overview?days=30', { auth: true })).body.sales.revenue;
+  // The API accepts the friendly word and stores the value the CHECK allows.
+  check('delivered → returned', (await move('returned')).status === 200);
+
+  const cpStockReturned = (await api(`/api/admin/products/${cpProduct.id}`, { auth: true })).body.product.stock;
+  check('a return puts every unit back', cpStockReturned === cpStockBefore, `${cpStockDelivered} → ${cpStockReturned}`);
+
+  const cpMoves = await api(`/api/admin/products/${cpProduct.id}/movements`, { auth: true });
+  check('the return is written to the stock ledger',
+    cpMoves.body.movements.some((m) => m.reason === 'return' && m.note?.includes(cpOrder.body.order.order_no)));
+
+  const revenueAfterReturn = (await api('/api/admin/analytics/overview?days=30', { auth: true })).body.sales.revenue;
+  check('a return removes the money from revenue', revenueAfterReturn < revenueBeforeReturn,
+    `${taka(revenueBeforeReturn)} → ${taka(revenueAfterReturn)}`);
+
+  check('returned is final — cannot go back to delivered', (await move('delivered')).status === 400);
+  check('returned is final — cannot reopen as pending', (await move('pending')).status === 400);
+
+  const cpTracked = await api(`/api/orders/${cpOrder.body.order.order_no}?phone=01555000111`, { expect: 200 });
+  check('the customer sees the returned checkpoint', cpTracked.body.order.status === 'refunded',
+    cpTracked.body.order.status);
 
   // ---------------------------------------------------------- content
   console.log('\nContent, offers and accounts');

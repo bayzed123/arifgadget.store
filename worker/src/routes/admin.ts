@@ -18,7 +18,45 @@ import { hashPassword, randomSalt, signToken, verifyPassword, verifyToken } from
 import { PRODUCT_COLUMNS, loadTiers, toAdminProduct, type ProductRow } from '../lib/catalog';
 
 const SESSION_HOURS = 12;
-const ORDER_STATUSES = ['pending', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'refunded'];
+/**
+ * Courier-style delivery checkpoints. Two stored values carry a friendlier
+ * label on screen, because `orders.status` has a CHECK constraint from the
+ * first migration and rebuilding that table on a live shop is not worth a
+ * rename (see migration 0009):
+ *
+ *   shipped  → "On the way"
+ *   refunded → "Returned"
+ */
+const ORDER_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'refunded', 'cancelled'];
+
+/** "returned" is the word everyone uses; accept it and store the legacy value. */
+const STATUS_ALIASES: Record<string, string> = { returned: 'refunded', on_the_way: 'shipped' };
+
+/**
+ * Which checkpoint may follow which. This is not decoration: `returned` and
+ * `cancelled` put every unit back on the shelf, so a route back into the
+ * pipeline would leave stock credited twice and the ledger telling a lie.
+ * Terminal states are therefore terminal.
+ */
+const NEXT_STATUSES: Record<string, string[]> = {
+  pending: ['confirmed', 'cancelled'],
+  confirmed: ['shipped', 'cancelled'],
+  shipped: ['delivered', 'refunded'],
+  delivered: ['refunded'],
+  refunded: [],
+  cancelled: [],
+};
+
+/** What the shop calls each checkpoint, for error messages staff will read. */
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending',
+  confirmed: 'Order confirmed',
+  shipped: 'On the way',
+  delivered: 'Delivered',
+  refunded: 'Returned',
+  cancelled: 'Cancelled',
+};
+const label = (status: string) => STATUS_LABELS[status] ?? status;
 
 export const admin = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -536,8 +574,23 @@ admin.patch('/orders/:id', async (c) => {
   const binds: unknown[] = [];
 
   if (body.status !== undefined) {
-    const status = String(body.status);
-    if (!ORDER_STATUSES.includes(status)) badRequest(`Status must be one of: ${ORDER_STATUSES.join(', ')}`);
+    const raw = String(body.status);
+    const status = STATUS_ALIASES[raw] ?? raw;
+    if (!ORDER_STATUSES.includes(status)) {
+      badRequest(`Status must be one of: ${ORDER_STATUSES.map(label).join(', ')}`);
+    }
+
+    if (status !== current.status) {
+      const allowed = NEXT_STATUSES[current.status] ?? [];
+      if (!allowed.includes(status)) {
+        badRequest(
+          allowed.length
+            ? `An order at "${label(current.status)}" can only move to: ${allowed.map(label).join(' or ')}`
+            : `"${label(current.status)}" is the final checkpoint — this order cannot be moved again`,
+        );
+      }
+    }
+
     sets.push('status = ?');
     binds.push(status);
   }

@@ -1,22 +1,27 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
-import { dateTime, money, number, ORDER_STATUS_TONE, percent } from '../../lib/format';
+import { dateTime, money, number, orderStatus, ORDER_STATUS_TONE, percent } from '../../lib/format';
 import { useToast } from '../../lib/store';
 import type { AdminOrder, OrderItem } from '../../lib/types';
 import { Empty, Spinner } from '../../components/ui';
 
-const STATUSES = ['pending', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'refunded'];
+const STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'refunded', 'cancelled'];
 
-/** The next natural step for each state; terminal states have none. */
+/**
+ * The next checkpoint on the happy path. The Worker enforces the same map, so
+ * a stale tab cannot push an order somewhere the pipeline does not allow.
+ */
 const NEXT: Record<string, string | null> = {
   pending: 'confirmed',
-  confirmed: 'packed',
-  packed: 'shipped',
+  confirmed: 'shipped',
   shipped: 'delivered',
   delivered: null,
-  cancelled: null,
   refunded: null,
+  cancelled: null,
 };
+
+/** Checkpoints that end an order and send its stock back. */
+const CLOSED = ['refunded', 'cancelled'];
 
 interface Page {
   orders: AdminOrder[];
@@ -74,8 +79,11 @@ export function Orders() {
 
   async function move(order: AdminOrder, next: string) {
     if (
-      (next === 'cancelled' || next === 'refunded') &&
-      !confirm(`Mark ${order.order_no} as ${next}? Every unit goes back into stock automatically.`)
+      CLOSED.includes(next) &&
+      !confirm(
+        `Mark ${order.order_no} as ${orderStatus(next).toLowerCase()}? Every unit goes back into stock ` +
+          'automatically, and the order drops out of revenue. This cannot be undone.',
+      )
     ) {
       return;
     }
@@ -83,7 +91,7 @@ export function Orders() {
     setSaving(order.id);
     try {
       await api(`/api/admin/orders/${order.id}`, { method: 'PATCH', auth: true, body: { status: next } });
-      toast(`${order.order_no} → ${next}`, 'success');
+      toast(`${order.order_no} → ${orderStatus(next)}`, 'success');
       load();
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'Could not update the order', 'error');
@@ -128,7 +136,7 @@ export function Orders() {
                 setPage(1);
               }}
             >
-              {option}
+              {orderStatus(option)}
             </button>
           ))}
         </div>
@@ -188,7 +196,7 @@ export function Orders() {
                         </td>
                         <td>
                           <span className={`badge ${ORDER_STATUS_TONE[order.status] ?? 'info'}`}>
-                            <span className="dot" /> {order.status}
+                            <span className="dot" /> {orderStatus(order.status)}
                           </span>
                         </td>
                         <td>
@@ -199,10 +207,10 @@ export function Orders() {
                                 disabled={saving === order.id}
                                 onClick={() => move(order, NEXT[order.status]!)}
                               >
-                                Mark {NEXT[order.status]}
+                                Mark {orderStatus(NEXT[order.status]!).toLowerCase()}
                               </button>
                             )}
-                            {!['cancelled', 'refunded', 'delivered'].includes(order.status) && (
+                            {['pending', 'confirmed'].includes(order.status) && (
                               <button
                                 className="btn danger sm"
                                 disabled={saving === order.id}
@@ -211,13 +219,13 @@ export function Orders() {
                                 Cancel
                               </button>
                             )}
-                            {order.status === 'delivered' && (
+                            {['shipped', 'delivered'].includes(order.status) && (
                               <button
                                 className="btn ghost sm"
                                 disabled={saving === order.id}
                                 onClick={() => move(order, 'refunded')}
                               >
-                                Refund
+                                Returned
                               </button>
                             )}
                           </div>

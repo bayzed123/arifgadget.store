@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
-import { dateTime, money, number, ORDER_STATUS_TONE, relativeTime } from '../../lib/format';
+import { dateTime, money, number, orderStatus, ORDER_STATUS_TONE, relativeTime } from '../../lib/format';
 import { Empty, Spinner } from '../../components/ui';
 
 interface CustomerRow {
@@ -229,7 +229,7 @@ export function Customers() {
                                       <td>{order.payment_method.toUpperCase()}</td>
                                       <td>
                                         <span className={`badge ${ORDER_STATUS_TONE[order.status] ?? 'info'}`}>
-                                          <span className="dot" /> {order.status}
+                                          <span className="dot" /> {orderStatus(order.status)}
                                         </span>
                                       </td>
                                     </tr>

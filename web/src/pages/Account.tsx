@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
-import { dateTime, money, number, ORDER_STATUS_TONE } from '../lib/format';
+import { dateTime, money, number, orderStatus, ORDER_STATUS_TONE } from '../lib/format';
 import { useCustomer, useToast } from '../lib/store';
 import type { PressItem } from '../lib/types';
 import { Empty, Spinner } from '../components/ui';
@@ -254,7 +254,7 @@ function Dashboard() {
                       </td>
                       <td>
                         <span className={`badge ${ORDER_STATUS_TONE[order.status] ?? 'info'}`}>
-                          <span className="dot" /> {order.status}
+                          <span className="dot" /> {orderStatus(order.status)}
                         </span>
                       </td>
                     </tr>

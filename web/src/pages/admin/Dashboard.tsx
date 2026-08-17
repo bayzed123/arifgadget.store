@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { dayLabel, money, moneyShort, number, percent, relativeTime } from '../../lib/format';
+import { dayLabel, money, moneyShort, number, percent, relativeTime, orderStatus } from '../../lib/format';
 import type { CategoryStat, InventoryAlert, Overview, SeriesPoint, StockMovement, TopProduct } from '../../lib/types';
 import { BarChart, BarList, Legend, LineChart } from '../../components/charts';
 import { Empty, Spinner, Stat } from '../../components/ui';
@@ -9,7 +9,7 @@ import { Empty, Spinner, Stat } from '../../components/ui';
 const RANGES = [7, 30, 90];
 type Metric = 'money' | 'orders' | 'units';
 
-const PIPELINE_ORDER = ['pending', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'refunded'];
+const PIPELINE_ORDER = ['pending', 'confirmed', 'shipped', 'delivered', 'refunded', 'cancelled'];
 
 export function Dashboard() {
   const [days, setDays] = useState(30);
@@ -170,7 +170,7 @@ export function Dashboard() {
             <BarList
               items={PIPELINE_ORDER.filter((status) => pipeline[status]).map((status) => ({
                 id: status,
-                label: status.charAt(0).toUpperCase() + status.slice(1),
+                label: orderStatus(status),
                 value: pipeline[status].count,
                 sub: money(pipeline[status].value),
               }))}
