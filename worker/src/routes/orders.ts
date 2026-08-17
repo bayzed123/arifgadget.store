@@ -4,6 +4,7 @@ import { badRequest, conflict, notFound, optionalString, readJson, requireString
 import { getSettings, loadTiers } from '../lib/catalog';
 import { computeCart, type CartLineInput, type CartTotals } from '../lib/pricing';
 import { currentCustomer } from './account';
+import { digitsSql, normalisePhone, phoneVariants } from '../lib/phone';
 
 interface IncomingItem {
   product_id: number;
@@ -119,7 +120,9 @@ orders.post('/orders', async (c) => {
   const items = parseItems(body.items);
 
   const customer_name = requireString(body.customer_name, 'customer_name', 120);
-  const customer_phone = requireString(body.customer_phone, 'customer_phone', 32);
+  // Stored canonically (01XXXXXXXXX) so tracking, the dashboard and account
+  // adoption all compare the same string later.
+  const customer_phone = normalisePhone(requireString(body.customer_phone, 'customer_phone', 32));
   const customer_email = optionalString(body.customer_email, '', 160);
   const address = requireString(body.address, 'address', 400);
   const city = requireString(body.city, 'city', 80);
@@ -207,19 +210,29 @@ orders.post('/orders', async (c) => {
   return c.json({ order: created, items: publicTotals(totals, byId).lines }, 201);
 });
 
-/** Order tracking. The phone number on the order acts as the shared secret. */
+/**
+ * Order tracking. The phone number on the order acts as the shared secret, so
+ * it has to match however the shopper typed it — at checkout and here. Orders
+ * placed before numbers were normalised are stored as +8801…, which an exact
+ * comparison would never find, hence the digits-only match on both sides.
+ */
 orders.get('/orders/:orderNo', async (c) => {
-  const orderNo = c.req.param('orderNo');
-  const phone = new URL(c.req.url).searchParams.get('phone')?.trim();
-  if (!phone) badRequest('Add ?phone= the number used on the order');
+  const orderNo = c.req.param('orderNo').trim().toUpperCase();
+  const rawPhone = new URL(c.req.url).searchParams.get('phone')?.trim();
+  if (!rawPhone) badRequest('Add ?phone= the number used on the order');
+
+  const variants = phoneVariants(normalisePhone(rawPhone));
+  const placeholders = variants.map(() => '?').join(', ');
 
   const order = await c.env.DB.prepare(
     `SELECT order_no, customer_name, city, status, subtotal, discount, shipping, tax, total,
             payment_method, created_at, updated_at
-       FROM orders WHERE order_no = ? AND customer_phone = ?`,
+       FROM orders
+      WHERE upper(order_no) = ?
+        AND ${digitsSql('customer_phone')} IN (${placeholders})`,
   )
-    .bind(orderNo, phone)
-    .first();
+    .bind(orderNo, ...variants)
+    .first<{ order_no: string }>();
 
   if (!order) notFound('No order matches that number and phone');
 
@@ -228,7 +241,7 @@ orders.get('/orders/:orderNo', async (c) => {
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
       WHERE o.order_no = ?`,
   )
-    .bind(orderNo)
+    .bind(order.order_no)
     .all();
 
   return c.json({ order, items: results ?? [] });

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
+import { useCustomer } from '../lib/store';
 import { dateTime, money, ORDER_STATUS_TONE } from '../lib/format';
 import { ProductThumb } from '../components/ProductThumb';
 
@@ -32,8 +33,15 @@ const STAGES = ['pending', 'confirmed', 'packed', 'shipped', 'delivered'];
 
 export function Track() {
   const [params, setParams] = useSearchParams();
+  const { customer } = useCustomer();
   const [orderNo, setOrderNo] = useState(params.get('order') ?? '');
   const [phone, setPhone] = useState('');
+
+  // A signed-in shopper already told us their number; making them retype it to
+  // see their own order is friction for nothing.
+  useEffect(() => {
+    if (customer?.phone) setPhone((prev) => prev || customer.phone);
+  }, [customer]);
   const [result, setResult] = useState<{ order: TrackedOrder; items: TrackedItem[] } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

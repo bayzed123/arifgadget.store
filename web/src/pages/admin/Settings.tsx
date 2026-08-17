@@ -17,20 +17,11 @@ interface AuditEntry {
 /** Money settings are stored in poisha but edited in taka. */
 const MONEY_KEYS = new Set(['shipping_flat', 'free_shipping_over']);
 
-/**
- * The footer build credits are fixed and shown read-only. The API rejects them
- * too, so removing them from the form is a courtesy, not the enforcement.
- */
-const LOCKED: { key: string; label: string; link: string }[] = [
-  { key: 'credit_dev_name', label: 'Dev', link: 'credit_dev_url' },
-  { key: 'credit_author_name', label: 'Developer', link: 'credit_author_url' },
-];
-
 const LABELS: Record<string, { label: string; hint: string }> = {
   store_name: { label: 'Store name', hint: 'Shown in the API and page titles' },
   store_tagline: { label: 'Tagline', hint: 'Short line under the logo' },
   store_address: { label: 'Shop address', hint: 'Shown in the footer so customers can visit' },
-  owner_name: { label: 'Owner name', hint: 'Credited in the footer and the About Us page' },
+  owner_name: { label: 'Owner name', hint: 'Shown in the footer and on the About Us page' },
   facebook_url: { label: 'Facebook page', hint: 'Full URL — shows the Facebook icon in the footer' },
   support_phone: { label: 'Main phone', hint: 'Displayed in the header bar and footer' },
   support_phone_2: { label: 'Second phone', hint: 'Optional extra number in the footer' },
@@ -143,32 +134,6 @@ export function Settings() {
                   : money(Math.round((Number(values.shipping_flat) || 0) * 100))}
               </strong>
               . Free delivery unlocks at {money(Math.round((Number(values.free_shipping_over) || 0) * 100))}.
-            </div>
-
-            <div className="locked-credits">
-              <div className="between" style={{ marginBottom: 8 }}>
-                <h4 style={{ margin: 0, fontSize: '0.85rem' }}>Footer build credits</h4>
-                <span className="badge info">
-                  <span aria-hidden="true">🔒</span> Fixed
-                </span>
-              </div>
-              {LOCKED.map((row) => (
-                <div className="between small" key={row.key}>
-                  <span className="muted">{row.label}</span>
-                  <span>
-                    {values[row.link] ? (
-                      <a href={values[row.link]} target="_blank" rel="noopener noreferrer">
-                        {values[row.key]}
-                      </a>
-                    ) : (
-                      values[row.key]
-                    )}
-                  </span>
-                </div>
-              ))}
-              <p className="tiny dim" style={{ marginTop: 8 }}>
-                এই দুটি ক্রেডিট স্থায়ী — ড্যাশবোর্ড থেকে কেউ বদলাতে পারবে না।
-              </p>
             </div>
 
             {error && <div className="alert error">{error}</div>}

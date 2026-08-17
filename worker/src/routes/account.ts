@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { CustomerClaims, Env, Variables } from '../types';
 import { badRequest, conflict, notFound, optionalString, readJson, requireString, unauthorized } from '../lib/http';
 import { hashPassword, randomSalt, signToken, verifyPassword, verifyToken } from '../lib/auth';
+import { digitsSql, normalisePhone, phoneVariants, validPhone } from '../lib/phone';
 
 const SESSION_DAYS = 30;
 
@@ -13,18 +14,6 @@ function secret(env: Env): string {
     throw new HTTPException(500, { message: 'JWT_SECRET is not configured' });
   }
   return env.JWT_SECRET;
-}
-
-/** Bangladeshi mobile numbers, stored in one canonical 01XXXXXXXXX form. */
-export function normalisePhone(raw: string): string {
-  let digits = raw.replace(/\D/g, '');
-  if (digits.startsWith('880')) digits = `0${digits.slice(3)}`;
-  if (digits.length === 10 && digits.startsWith('1')) digits = `0${digits}`;
-  return digits;
-}
-
-function validPhone(phone: string): boolean {
-  return /^01[3-9]\d{8}$/.test(phone);
 }
 
 /** Reads the customer session, if one is present. Never throws. */
@@ -90,9 +79,15 @@ account.post('/register', async (c) => {
     )
     .first<{ id: number; phone: string; name: string }>();
 
-  // Adopt any past guest orders placed with this number.
-  await c.env.DB.prepare('UPDATE orders SET customer_id = ? WHERE customer_phone = ? AND customer_id IS NULL')
-    .bind(row!.id, phone)
+  // Adopt any past guest orders placed with this number, including ones saved
+  // as +880… before numbers were normalised on the way in.
+  const variants = phoneVariants(phone);
+  await c.env.DB.prepare(
+    `UPDATE orders SET customer_id = ?
+      WHERE customer_id IS NULL
+        AND ${digitsSql('customer_phone')} IN (${variants.map(() => '?').join(', ')})`,
+  )
+    .bind(row!.id, ...variants)
     .run();
 
   const session = await issue(c, row!);

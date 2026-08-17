@@ -29,8 +29,10 @@ knowledge needed.
 
 ## 1. Signing in
 
-Go to your site and click **Admin** in the top-right corner, or add `/admin` to
-the web address.
+Type your site address with `/admin` on the end —
+`https://arifgadget.store/admin`. There is deliberately **no link to the
+dashboard anywhere on the public site**, so customers never see it; bookmark
+the address instead.
 
 | | |
 |---|---|

@@ -380,6 +380,61 @@ async function main() {
   const anonAccount = await api('/api/account/orders');
   check('account routes need a session', anonAccount.status === 401);
 
+  // ------------------------------------------------- tracking tolerates formats
+  // Real orders were stored as +8801400290812 while the shopper types
+  // 01400290812, so an exact string match found nothing.
+  console.log('\nOrder tracking accepts any phone format');
+  const trackBand = (await api('/api/products/xiaomi-smart-band-9', { expect: 200 })).body.product;
+  const intlOrder = await api('/api/orders', {
+    method: 'POST', expect: 201,
+    body: {
+      customer_name: 'Format Test', customer_phone: '+8801400290828',
+      address: '1 Test Road', city: 'Dhaka',
+      items: [{ product_id: trackBand.id, qty: 1 }],
+    },
+  });
+  const intlNo = intlOrder.body.order.order_no;
+
+  check(
+    'a +880 number is stored canonically',
+    (await api(`/api/admin/orders?q=${intlNo}`, { auth: true, expect: 200 })).body.orders[0].customer_phone
+      === '01400290828',
+  );
+
+  for (const typed of ['01400290828', '+8801400290828', '8801400290828', '01400-290828', '01400 290828']) {
+    const res = await api(`/api/orders/${intlNo}?phone=${encodeURIComponent(typed)}`);
+    check(`tracking works when the shopper types ${typed}`, res.status === 200, `got ${res.status}`);
+  }
+
+  check(
+    'a lowercase order number still resolves',
+    (await api(`/api/orders/${intlNo.toLowerCase()}?phone=01400290828`)).status === 200,
+  );
+  check(
+    'a different number is still refused',
+    (await api(`/api/orders/${intlNo}?phone=01400290812`)).status === 404,
+  );
+
+  // Registering with a number used for guest orders must adopt them, whatever
+  // format those older orders were saved in.
+  const adoptPhone = `014${String(10000000 + Math.floor(Math.random() * 89999999))}`;
+  await api('/api/orders', {
+    method: 'POST', expect: 201,
+    body: {
+      customer_name: 'Adopt Me', customer_phone: `+88${adoptPhone}`,
+      address: '2 Test Road', city: 'Dhaka',
+      items: [{ product_id: trackBand.id, qty: 1 }],
+    },
+  });
+  const adopted = await api('/api/account/register', {
+    method: 'POST', expect: 201,
+    body: { name: 'Adopt Me', phone: adoptPhone, password: 'adopt-pass-1' },
+  });
+  const adoptedOrders = await fetch(`${BASE}/api/account/orders`, {
+    headers: { Authorization: `Bearer ${adopted.body.token}` },
+  }).then((r) => r.json());
+  check('guest orders are adopted on registration', adoptedOrders.orders.length === 1, `got ${adoptedOrders.orders.length}`);
+
   // ------------------------------------------------- customers in the dashboard
   console.log('\nCustomers in the dashboard');
   const custList = await api(`/api/admin/customers?q=${phone}`, { auth: true, expect: 200 });

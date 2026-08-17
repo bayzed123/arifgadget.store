@@ -269,9 +269,7 @@ export function Layout() {
               <ul>
                 <li>Bulk &amp; reseller pricing</li>
                 <li>Nationwide courier delivery</li>
-                <li>
-                  <Link to="/admin">Staff dashboard</Link>
-                </li>
+                <li>Wholesale accounts welcome</li>
               </ul>
             </div>
           </div>

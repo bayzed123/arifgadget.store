@@ -89,15 +89,6 @@ export function MenuDrawer({
               ›
             </span>
           </Link>
-          <Link to="/admin" onClick={onClose}>
-            <span className="ic" aria-hidden="true">
-              🔐
-            </span>
-            <span className="nm">Staff dashboard</span>
-            <span className="chev" aria-hidden="true">
-              ›
-            </span>
-          </Link>
         </div>
       </nav>
     </div>
