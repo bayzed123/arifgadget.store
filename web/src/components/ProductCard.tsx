@@ -51,7 +51,7 @@ export function ProductCard({ product }: { product: Product }) {
         )}
 
         <div className="card-meta">
-          <span>MOQ {product.moq}</span>
+          <span>{product.moq > 1 ? `MOQ ${product.moq}` : 'From 1 piece'}</span>
           <span aria-hidden="true">·</span>
           <span>{product.units_sold} sold</span>
           {product.stock_state === 'low' && product.in_stock && (

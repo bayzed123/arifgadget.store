@@ -132,7 +132,7 @@ If you accidentally price below cost, a red warning appears.
 |---|---|
 | **Opening stock** | How many you have right now. Only settable when creating; afterwards use the stock dialog (see §7). |
 | **Low-stock threshold** | When stock falls to this number the product joins the restock queue. Set it to roughly a week of sales. |
-| **Minimum order qty (MOQ)** | The smallest quantity a customer may buy. Use `1` for retail items, higher for carton-only lines. |
+| **Minimum order qty (MOQ)** | The smallest quantity a customer may buy. **Every product is set to `1`** so anyone can buy a single piece; volume tiers still reward larger orders. Raise it only for a line you genuinely will not break a carton on. |
 
 ### Finishing
 
@@ -310,8 +310,9 @@ status buttons filter the list.
 | **Store name / Tagline** | Shown around the site. |
 | **Support phone / email** | Displayed in the header and footer, clickable on phones. |
 | **Currency code / symbol** | `BDT` and `৳` by default. |
-| **Flat delivery charge** | What customers pay for delivery below the free threshold. |
-| **Free delivery over** | Order value that makes delivery free. A progress bar in the cart nudges customers toward it. |
+| **Delivery inside Dhaka** | Charged when the shopper picks *Inside Dhaka* at checkout. Currently ৳90. |
+| **Delivery outside Dhaka** | Charged everywhere else in Bangladesh. Currently ৳130. |
+| **Free delivery over** | Order value that makes delivery free. A progress bar in the cart nudges customers toward it. **Set this to `0` if you want every order to pay the ৳90 / ৳130 charge.** |
 | **Tax percentage** | Applied to the order value. Leave at `0` if you do not charge tax. |
 
 Enter money in taka — the system stores it precisely behind the scenes.

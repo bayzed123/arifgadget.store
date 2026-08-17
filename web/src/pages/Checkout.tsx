@@ -3,8 +3,15 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { getDirectBuy, setDirectBuy, useCart, useCustomer, useToast } from '../lib/store';
 import { money, number } from '../lib/format';
+import type { DeliveryZone, StoreSettings } from '../lib/types';
 import { Empty, Spinner } from '../components/ui';
 import { OrderSummary, useQuote } from './Cart';
+
+/** Delivery zones, priced from store settings so the shop can change the rates. */
+const ZONES: { key: DeliveryZone; label: string; hint: string }[] = [
+  { key: 'dhaka', label: 'Inside Dhaka', hint: 'Dhaka city and metro area' },
+  { key: 'outside', label: 'Outside Dhaka', hint: 'Anywhere else in Bangladesh' },
+];
 
 const PAYMENTS = [
   { key: 'cod', label: 'Cash on delivery', hint: 'Pay the courier' },
@@ -32,7 +39,16 @@ export function Checkout() {
     () => (direct ? [{ product_id: direct.product_id, qty: direct.qty }] : cart.items),
     [direct, cart.items],
   );
-  const { quote, loading } = useQuote(lineItems);
+  const [zone, setZone] = useState<DeliveryZone>('outside');
+
+  // The zone rates are shop settings, so the picker shows what each one costs.
+  const [settings, setSettings] = useState<StoreSettings | null>(null);
+  useEffect(() => {
+    api<StoreSettings>('/api/settings')
+      .then(setSettings)
+      .catch(() => setSettings(null));
+  }, []);
+  const { quote, loading } = useQuote(lineItems, zone);
 
   const [form, setForm] = useState({
     customer_name: '',
@@ -74,7 +90,11 @@ export function Checkout() {
       const res = await api<{ order: Placed }>('/api/orders', {
         method: 'POST',
         customerAuth: true,
-        body: { ...form, items: lineItems.map((i) => ({ product_id: i.product_id, qty: i.qty })) },
+        body: {
+          ...form,
+          delivery_zone: zone,
+          items: lineItems.map((i) => ({ product_id: i.product_id, qty: i.qty })),
+        },
       });
       setPlaced(res.order);
       if (direct) setDirectBuy(null);
@@ -267,6 +287,51 @@ export function Checkout() {
                   onChange={(e) => set('note', e.target.value)}
                 />
               </div>
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-head">
+              <h3>Delivery area</h3>
+            </div>
+            <div className="panel-body">
+              <div className="form-grid">
+                {ZONES.map((option) => (
+                  <label
+                    key={option.key}
+                    className="row gap-12"
+                    style={{
+                      padding: '13px 15px',
+                      border: `1.5px solid ${zone === option.key ? 'var(--brand)' : 'var(--line)'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      cursor: 'pointer',
+                      background: zone === option.key ? 'var(--brand-soft)' : 'transparent',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="delivery_zone"
+                      value={option.key}
+                      checked={zone === option.key}
+                      onChange={() => setZone(option.key)}
+                    />
+                    <span>
+                      <strong style={{ display: 'block', fontSize: '0.9rem' }}>{option.label}</strong>
+                      <span className="tiny dim">{option.hint}</span>
+                    </span>
+                    <span className="num" style={{ marginLeft: 'auto', fontWeight: 700 }}>
+                      {settings
+                        ? money(option.key === 'dhaka' ? settings.shipping_dhaka : settings.shipping_outside)
+                        : ''}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {quote?.free_shipping_applied && (
+                <p className="tiny" style={{ color: 'var(--good)', fontWeight: 700, marginTop: 10 }}>
+                  This order is over the free-delivery threshold, so there is no charge either way.
+                </p>
+              )}
             </div>
           </div>
 

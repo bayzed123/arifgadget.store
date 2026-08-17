@@ -56,7 +56,8 @@ export interface AdminProduct extends Product {
 export interface StoreSettings {
   currency: string;
   currency_symbol: string;
-  shipping_flat: number;
+  shipping_dhaka: number;
+  shipping_outside: number;
   free_shipping_over: number;
   tax_pct: number;
   store_name?: string;
@@ -88,6 +89,9 @@ export interface QuoteLine {
   in_stock: boolean;
 }
 
+/** Delivery is priced by zone; anything unknown falls back to the higher rate. */
+export type DeliveryZone = 'dhaka' | 'outside';
+
 export interface Quote {
   lines: QuoteLine[];
   subtotal: number;
@@ -97,6 +101,7 @@ export interface Quote {
   tax: number;
   total: number;
   units: number;
+  delivery_zone: DeliveryZone;
   free_shipping_applied: boolean;
   free_shipping_gap: number;
 }

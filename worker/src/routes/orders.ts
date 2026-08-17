@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
 import { badRequest, conflict, notFound, optionalString, readJson, requireString } from '../lib/http';
 import { getSettings, loadTiers } from '../lib/catalog';
-import { computeCart, type CartLineInput, type CartTotals } from '../lib/pricing';
+import { computeCart, parseZone, type CartLineInput, type CartTotals, type DeliveryZone } from '../lib/pricing';
 import { currentCustomer } from './account';
 import { digitsSql, normalisePhone, phoneVariants } from '../lib/phone';
 
@@ -43,7 +43,7 @@ function parseItems(raw: unknown): IncomingItem[] {
 }
 
 /** Loads the requested products and prices the cart through the tier engine. */
-async function priceCart(env: Env, items: IncomingItem[]) {
+async function priceCart(env: Env, items: IncomingItem[], zone: DeliveryZone = 'outside') {
   const placeholders = items.map(() => '?').join(',');
   const { results } = await env.DB.prepare(
     `SELECT id, sku, name, image_url, price, cost_price, moq, stock
@@ -73,7 +73,7 @@ async function priceCart(env: Env, items: IncomingItem[]) {
     };
   });
 
-  return { totals: computeCart(inputs, settings), byId, settings };
+  return { totals: computeCart(inputs, settings, 0, zone), byId, settings };
 }
 
 /** Public totals never leak cost price, profit or margin. */
@@ -102,6 +102,7 @@ function publicTotals(totals: CartTotals, byId: Map<number, PricedProduct>) {
     tax: totals.tax,
     total: totals.total,
     units: totals.units,
+    delivery_zone: totals.delivery_zone,
     free_shipping_applied: totals.free_shipping_applied,
     free_shipping_gap: totals.free_shipping_gap,
   };
@@ -111,7 +112,7 @@ function publicTotals(totals: CartTotals, byId: Map<number, PricedProduct>) {
 orders.post('/quote', async (c) => {
   const body = await readJson(c);
   const items = parseItems(body.items);
-  const { totals, byId } = await priceCart(c.env, items);
+  const { totals, byId } = await priceCart(c.env, items, parseZone(body.delivery_zone));
   return c.json(publicTotals(totals, byId));
 });
 
@@ -131,7 +132,8 @@ orders.post('/orders', async (c) => {
     ? String(body.payment_method)
     : 'cod';
 
-  const { totals, byId } = await priceCart(c.env, items);
+  const delivery_zone = parseZone(body.delivery_zone);
+  const { totals, byId } = await priceCart(c.env, items, delivery_zone);
 
   const short = totals.lines.filter((line) => byId.get(line.product_id)!.stock < line.qty);
   if (short.length) {
@@ -156,8 +158,9 @@ orders.post('/orders', async (c) => {
   const statements = [
     c.env.DB.prepare(
       `INSERT INTO orders (order_no, customer_name, customer_phone, customer_email, address, city,
-                           note, payment_method, status, discount, shipping, tax, customer_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+                           note, payment_method, status, discount, shipping, tax, customer_id,
+                           delivery_zone)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
     ).bind(
       orderNo,
       customer_name,
@@ -171,6 +174,7 @@ orders.post('/orders', async (c) => {
       totals.shipping,
       totals.tax,
       customer?.sub ?? null,
+      delivery_zone,
     ),
     ...totals.lines.map((line) => {
       const product = byId.get(line.product_id)!;
@@ -226,7 +230,7 @@ orders.get('/orders/:orderNo', async (c) => {
 
   const order = await c.env.DB.prepare(
     `SELECT order_no, customer_name, city, status, subtotal, discount, shipping, tax, total,
-            payment_method, created_at, updated_at
+            payment_method, delivery_zone, created_at, updated_at
        FROM orders
       WHERE upper(order_no) = ?
         AND ${digitsSql('customer_phone')} IN (${placeholders})`,

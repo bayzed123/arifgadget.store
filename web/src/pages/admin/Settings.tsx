@@ -15,7 +15,7 @@ interface AuditEntry {
 }
 
 /** Money settings are stored in poisha but edited in taka. */
-const MONEY_KEYS = new Set(['shipping_flat', 'free_shipping_over']);
+const MONEY_KEYS = new Set(['shipping_dhaka', 'shipping_outside', 'free_shipping_over']);
 
 const LABELS: Record<string, { label: string; hint: string }> = {
   store_name: { label: 'Store name', hint: 'Shown in the API and page titles' },
@@ -29,7 +29,8 @@ const LABELS: Record<string, { label: string; hint: string }> = {
   support_email: { label: 'Support email', hint: 'Displayed in the footer' },
   currency: { label: 'Currency code', hint: 'e.g. BDT' },
   currency_symbol: { label: 'Currency symbol', hint: 'e.g. ৳' },
-  shipping_flat: { label: 'Flat delivery charge (৳)', hint: 'Applied below the free-delivery threshold' },
+  shipping_dhaka: { label: 'Delivery inside Dhaka (৳)', hint: 'Charged when the shopper picks "Inside Dhaka"' },
+  shipping_outside: { label: 'Delivery outside Dhaka (৳)', hint: 'Charged everywhere else in Bangladesh' },
   free_shipping_over: { label: 'Free delivery over (৳)', hint: 'Order value that unlocks free delivery' },
   tax_pct: { label: 'Tax percentage', hint: 'Applied to the net order value. 0 disables it.' },
 };
@@ -131,9 +132,11 @@ export function Settings() {
               <strong>
                 {Number(values.free_shipping_over ?? 0) * 100 <= 100000
                   ? 'free delivery'
-                  : money(Math.round((Number(values.shipping_flat) || 0) * 100))}
+                  : `${money(Math.round((Number(values.shipping_dhaka) || 0) * 100))} inside Dhaka, ` +
+                    `${money(Math.round((Number(values.shipping_outside) || 0) * 100))} elsewhere`}
               </strong>
-              . Free delivery unlocks at {money(Math.round((Number(values.free_shipping_over) || 0) * 100))}.
+              . Free delivery unlocks at {money(Math.round((Number(values.free_shipping_over) || 0) * 100))} —
+              set that to 0 to charge delivery on every order.
             </div>
 
             {error && <div className="alert error">{error}</div>}

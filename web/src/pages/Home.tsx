@@ -59,7 +59,10 @@ export function Home() {
           <div className="promo-card">
             <span className="eyebrow">Free delivery</span>
             <p className="k">Over {money(data.settings.free_shipping_over)}</p>
-            <p className="small muted">Flat {money(data.settings.shipping_flat)} courier below that, anywhere in Bangladesh.</p>
+            <p className="small muted">
+              Below that, {money(data.settings.shipping_dhaka)} inside Dhaka and{' '}
+              {money(data.settings.shipping_outside)} anywhere else in Bangladesh.
+            </p>
           </div>
           <Link to="/catalog" className="btn dark block lg">
             Browse all {data.categories.reduce((n, c) => n + (c.product_count ?? 0), 0)} products

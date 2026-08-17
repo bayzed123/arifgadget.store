@@ -86,7 +86,7 @@ async function main() {
   // ---------------------------------------------------------- pricing engine
   console.log('\nPricing engine');
   const single = await api('/api/quote', { method: 'POST', body: { items: [{ product_id: buds.id, qty: 1 }] }, expect: 200 });
-  check('MOQ raises qty 1 → 5', single.body.lines[0].qty === 5, `got ${single.body.lines[0].qty}`);
+  check('a single piece can be quoted', single.body.lines[0].qty === 1, `got ${single.body.lines[0].qty}`);
   check('base price applies below the first tier', single.body.lines[0].unit_price === 189000);
 
   const bulk = await api('/api/quote', { method: 'POST', body: { items: [{ product_id: buds.id, qty: 60 }] }, expect: 200 });
@@ -101,9 +101,29 @@ async function main() {
 
   // A single ৳4,250 band sits below the ৳5,000 free-shipping line.
   const band = (await api('/api/products/xiaomi-smart-band-9', { expect: 200 })).body.product;
-  const cheap = await api('/api/quote', { method: 'POST', body: { items: [{ product_id: band.id, qty: 1 }] }, expect: 200 });
-  check('flat shipping applies under threshold', cheap.body.shipping === 8000, `got ${cheap.body.shipping}`);
+  const cheap = await api('/api/quote', {
+    method: 'POST', expect: 200,
+    body: { items: [{ product_id: band.id, qty: 1 }], delivery_zone: 'outside' },
+  });
+  check('outside-Dhaka delivery is ৳130', cheap.body.shipping === 13000, `got ${cheap.body.shipping}`);
   check('free-shipping gap reported', cheap.body.free_shipping_gap === 500000 - 425000, `got ${cheap.body.free_shipping_gap}`);
+
+  const inDhaka = await api('/api/quote', {
+    method: 'POST', expect: 200,
+    body: { items: [{ product_id: band.id, qty: 1 }], delivery_zone: 'dhaka' },
+  });
+  check('inside-Dhaka delivery is ৳90', inDhaka.body.shipping === 9000, `got ${inDhaka.body.shipping}`);
+  check('the zone comes back on the quote', inDhaka.body.delivery_zone === 'dhaka');
+  check('picking a zone changes the total', inDhaka.body.total === cheap.body.total - 4000,
+    `${taka(cheap.body.total)} → ${taka(inDhaka.body.total)}`);
+
+  const noZone = await api('/api/quote', { method: 'POST', expect: 200, body: { items: [{ product_id: band.id, qty: 1 }] } });
+  check('an unspecified zone falls back to the higher rate', noZone.body.shipping === 13000);
+  const junkZone = await api('/api/quote', {
+    method: 'POST', expect: 200,
+    body: { items: [{ product_id: band.id, qty: 1 }], delivery_zone: 'narnia' },
+  });
+  check('a nonsense zone falls back safely', junkZone.body.shipping === 13000);
 
   const dup = await api('/api/quote', { method: 'POST', body: { items: [{ product_id: buds.id, qty: 1 }, { product_id: buds.id, qty: 2 }] } });
   check('duplicate line items rejected', dup.status === 400);
@@ -314,6 +334,55 @@ async function main() {
 
   const audit = await api('/api/admin/audit?limit=10', { auth: true, expect: 200 });
   check('audit trail recorded', audit.body.entries.length > 0);
+
+  // -------------------------------------- order one piece, or the whole shelf
+  console.log('\nOrder from 1 piece up to stock');
+  const anyProducts = (await api('/api/products?limit=50', { expect: 200 })).body.products;
+  check('every product can be ordered singly', anyProducts.every((p) => p.moq === 1),
+    anyProducts.filter((p) => p.moq !== 1).map((p) => `${p.name}=${p.moq}`).join(', ') || 'all moq 1');
+
+  // A throwaway product with a small shelf, so repeated runs never depend on —
+  // or strand — whatever the real shop has in stock.
+  const shelfSku = `SHELF-${Date.now().toString(36).toUpperCase()}`;
+  const shelf = await api('/api/admin/products', {
+    method: 'POST', auth: true, expect: 201,
+    body: {
+      name: `Shelf Test Gadget ${shelfSku}`, sku: shelfSku, brand: 'TestCo',
+      cost_price: 50000, price: 80000, stock: 8, moq: 1, status: 'active',
+    },
+  });
+  const shelfProduct = { id: shelf.body.id ?? shelf.body.product?.id };
+
+  const onePiece = await api('/api/orders', {
+    method: 'POST', expect: 201,
+    body: {
+      customer_name: 'Single Piece', customer_phone: '01555222333',
+      address: '1 Retail Lane', city: 'Dhaka', delivery_zone: 'dhaka',
+      items: [{ product_id: shelfProduct.id, qty: 1 }],
+    },
+  });
+  check('a one-piece order goes through', onePiece.body.order.order_no.startsWith('AG'));
+  const wholeShelf = await api('/api/orders', {
+    method: 'POST', expect: 201,
+    body: {
+      customer_name: 'Whole Shelf', customer_phone: '01555222444',
+      address: '2 Retail Lane', city: 'Dhaka',
+      items: [{ product_id: shelfProduct.id, qty: 7 }],
+    },
+  });
+  check('the entire shelf can be bought in one order', wholeShelf.body.order.order_no.startsWith('AG'));
+  const emptied = (await api(`/api/admin/products/${shelfProduct.id}`, { auth: true })).body.product;
+  check('that leaves the shelf empty, not negative', emptied.stock === 0, `stock ${emptied.stock}`);
+  check('one more unit is refused', (await api('/api/orders', {
+    method: 'POST',
+    body: {
+      customer_name: 'One Too Many', customer_phone: '01555222555',
+      address: '3 Retail Lane', city: 'Dhaka',
+      items: [{ product_id: shelfProduct.id, qty: 1 }],
+    },
+  })).status === 409);
+
+  await api(`/api/admin/products/${shelfProduct.id}`, { method: 'DELETE', auth: true, expect: 200 });
 
   // ------------------------------------------- delivery checkpoint pipeline
   // pending → confirmed → shipped ("On the way") → delivered, with returned

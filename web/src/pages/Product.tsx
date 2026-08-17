@@ -175,14 +175,26 @@ export function Product() {
                 type="number"
                 value={qty}
                 min={product.moq}
-                onChange={(e) => setQty(Math.max(Number(e.target.value) || product.moq, product.moq))}
+                max={product.stock}
+                onChange={(e) =>
+                  // Clamped both ways: below the minimum is invalid, above stock
+                  // would only fail later at checkout.
+                  setQty(Math.min(Math.max(Number(e.target.value) || product.moq, product.moq), product.stock))
+                }
                 aria-label="Quantity"
               />
-              <button onClick={() => setQty((q) => q + 1)} aria-label="Increase quantity">
+              <button
+                onClick={() => setQty((q) => Math.min(q + 1, product.stock))}
+                disabled={qty >= product.stock}
+                aria-label="Increase quantity"
+              >
                 +
               </button>
             </div>
-            <span className="small dim">MOQ {product.moq}</span>
+            <span className="small dim">
+              {product.moq > 1 && <>MOQ {product.moq} · </>}
+              {number(product.stock)} in stock
+            </span>
           </div>
 
           <div style={{ background: 'var(--surface-inset)', padding: '12px 14px', borderRadius: 'var(--radius-sm)' }}>

@@ -8,8 +8,19 @@ export interface PriceTier {
   unit_price: number;
 }
 
+/** Delivery is priced by zone: inside Dhaka is cheaper than the rest of the country. */
+export type DeliveryZone = 'dhaka' | 'outside';
+
+export const DELIVERY_ZONES: DeliveryZone[] = ['dhaka', 'outside'];
+
+/** Anything unrecognised falls back to the safer, higher rate. */
+export function parseZone(value: unknown): DeliveryZone {
+  return value === 'dhaka' ? 'dhaka' : 'outside';
+}
+
 export interface StoreSettings {
-  shipping_flat: number;
+  shipping_dhaka: number;
+  shipping_outside: number;
   free_shipping_over: number;
   tax_pct: number;
   currency: string;
@@ -17,12 +28,18 @@ export interface StoreSettings {
 }
 
 export const DEFAULT_SETTINGS: StoreSettings = {
-  shipping_flat: 8000,
+  shipping_dhaka: 9000,
+  shipping_outside: 13000,
   free_shipping_over: 500000,
   tax_pct: 0,
   currency: 'BDT',
   currency_symbol: '৳',
 };
+
+/** The courier charge for a zone, before any free-delivery threshold. */
+export function shippingRate(settings: StoreSettings, zone: DeliveryZone): number {
+  return zone === 'dhaka' ? settings.shipping_dhaka : settings.shipping_outside;
+}
 
 /**
  * Alibaba-style volume pricing: pick the best tier the quantity qualifies for.
@@ -73,6 +90,7 @@ export interface CartTotals {
   profit: number;
   margin_pct: number;
   units: number;
+  delivery_zone: DeliveryZone;
   free_shipping_applied: boolean;
   /** Minor units still needed to unlock free shipping, 0 once unlocked. */
   free_shipping_gap: number;
@@ -82,6 +100,7 @@ export function computeCart(
   inputs: CartLineInput[],
   settings: StoreSettings,
   discount = 0,
+  zone: DeliveryZone = 'outside',
 ): CartTotals {
   const lines: CartLine[] = inputs.map((input) => {
     const qty = Math.max(input.qty, input.moq);
@@ -107,7 +126,7 @@ export function computeCart(
   const net = subtotal - cappedDiscount;
 
   const free_shipping_applied = net >= settings.free_shipping_over && net > 0;
-  const shipping = net === 0 || free_shipping_applied ? 0 : settings.shipping_flat;
+  const shipping = net === 0 || free_shipping_applied ? 0 : shippingRate(settings, zone);
   const tax = Math.round((net * settings.tax_pct) / 100);
   const total = net + shipping + tax;
   const profit = net - cost_total;
@@ -124,6 +143,7 @@ export function computeCart(
     profit,
     margin_pct: net > 0 ? Math.round((profit * 10000) / net) / 100 : 0,
     units,
+    delivery_zone: zone,
     free_shipping_applied,
     free_shipping_gap: free_shipping_applied ? 0 : Math.max(settings.free_shipping_over - net, 0),
   };
@@ -136,7 +156,10 @@ export function parseSettings(rows: { key: string; value: string }[]): StoreSett
     return Number.isFinite(parsed) ? parsed : fallback;
   };
   return {
-    shipping_flat: num('shipping_flat', DEFAULT_SETTINGS.shipping_flat),
+    // shipping_flat is the pre-zone setting; it seeds both rates if a shop
+    // upgraded before the zone settings were written.
+    shipping_dhaka: num('shipping_dhaka', num('shipping_flat', DEFAULT_SETTINGS.shipping_dhaka)),
+    shipping_outside: num('shipping_outside', num('shipping_flat', DEFAULT_SETTINGS.shipping_outside)),
     free_shipping_over: num('free_shipping_over', DEFAULT_SETTINGS.free_shipping_over),
     tax_pct: num('tax_pct', DEFAULT_SETTINGS.tax_pct),
     currency: map.get('currency') ?? DEFAULT_SETTINGS.currency,

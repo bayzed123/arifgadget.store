@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useCart } from '../lib/store';
-import type { Quote } from '../lib/types';
+import type { DeliveryZone, Quote } from '../lib/types';
 import { money, number } from '../lib/format';
 import { ProductThumb } from '../components/ProductThumb';
 import { Empty, Spinner } from '../components/ui';
@@ -12,12 +12,12 @@ import { Empty, Spinner } from '../components/ui';
  * re-quote, so tier breaks, MOQ bumps and free shipping always match what
  * checkout will charge.
  */
-export function useQuote(items: { product_id: number; qty: number }[]) {
+export function useQuote(items: { product_id: number; qty: number }[], zone: DeliveryZone = 'outside') {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const key = JSON.stringify(items.map((i) => [i.product_id, i.qty]));
+  const key = JSON.stringify([items.map((i) => [i.product_id, i.qty]), zone]);
 
   useEffect(() => {
     if (items.length === 0) {
@@ -31,7 +31,7 @@ export function useQuote(items: { product_id: number; qty: number }[]) {
       setLoading(true);
       api<Quote>('/api/quote', {
         method: 'POST',
-        body: { items: items.map((i) => ({ product_id: i.product_id, qty: i.qty })) },
+        body: { items: items.map((i) => ({ product_id: i.product_id, qty: i.qty })), delivery_zone: zone },
         signal: controller.signal,
       })
         .then((res) => {
@@ -85,7 +85,12 @@ export function OrderSummary({ quote, loading }: { quote: Quote | null; loading:
       )}
 
       <div className="summary-row">
-        <span className="muted">Delivery</span>
+        <span className="muted">
+          Delivery
+          {!quote.free_shipping_applied && (
+            <span className="tiny dim"> · {quote.delivery_zone === 'dhaka' ? 'inside Dhaka' : 'outside Dhaka'}</span>
+          )}
+        </span>
         <span className="v">
           {quote.free_shipping_applied ? <span style={{ color: 'var(--good)' }}>Free</span> : money(quote.shipping)}
         </span>
@@ -204,7 +209,13 @@ export function Cart() {
                           onChange={(e) => cart.setQty(item.product_id, Number(e.target.value) || item.moq)}
                           aria-label={`Quantity of ${item.name}`}
                         />
-                        <button onClick={() => cart.setQty(item.product_id, item.qty + 1)} aria-label="Increase quantity">
+                        <button
+                          onClick={() =>
+                            cart.setQty(item.product_id, Math.min(item.qty + 1, line?.stock ?? item.qty + 1))
+                          }
+                          disabled={line ? item.qty >= line.stock : false}
+                          aria-label="Increase quantity"
+                        >
                           +
                         </button>
                       </div>
