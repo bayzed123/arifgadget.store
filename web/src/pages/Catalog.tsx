@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { trackViewItemList } from '../lib/analytics';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Product } from '../lib/types';
@@ -44,7 +45,10 @@ export function Catalog() {
     if (inStock) search.set('in_stock', '1');
 
     api<Page>(`/api/products?${search}`, { signal: controller.signal })
-      .then(setData)
+      .then((res) => {
+        setData(res);
+        trackViewItemList(q ? `Search: ${q}` : category ? `Category: ${category}` : 'All products', res.products);
+      })
       .catch((err: Error) => {
         if (err.name !== 'AbortError') setError(err.message);
       })

@@ -308,6 +308,40 @@ payment method and TrxID, and the grand total.
 customer can keep a PDF as proof of purchase. Only someone with both the order
 number and the phone number on the order can open it.
 
+### Google Analytics
+
+Every shopper action is reported to **Google Analytics 4** (measurement ID
+`G-54HYSJY06E`, stream `15447820887`) using Google's standard e-commerce
+events, so the built-in *Monetisation* and *Purchase journey* reports work with
+no setup in the GA console:
+
+| What the shopper does | Event GA4 receives |
+|---|---|
+| Opens any screen | `page_view` |
+| Searches | `search` |
+| Sees a product list | `view_item_list` |
+| Opens a product | `view_item` |
+| Taps *Shop now* | `select_item` |
+| Taps *Add to cart* | `add_to_cart` |
+| Opens the cart | `view_cart` |
+| Removes a line | `remove_from_cart` |
+| Reaches checkout | `begin_checkout` |
+| Picks a delivery area | `add_shipping_info` (Inside / Outside Dhaka) |
+| Picks a payment method | `add_payment_info` |
+| **Completes an order** | **`purchase`** |
+| Registers / signs in | `sign_up` / `login` |
+| Taps WhatsApp | `contact` |
+| Taps an offer popup | `select_promotion` |
+
+`purchase` carries the order number as `transaction_id`, so GA4 will not
+double-count a refreshed confirmation page, and you can reconcile GA against
+the dashboard order by order. Amounts are sent in **taka**, with delivery
+reported separately from goods.
+
+Two things are deliberately **not** measured: anything on `/admin`, so your own
+clicking never looks like customer behaviour, and anything on a developer's
+machine, so test traffic never reaches the shop's property.
+
 ### Finding an order
 
 Use the search box for an order number, customer name or phone number. The

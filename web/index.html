@@ -14,6 +14,19 @@
     <meta property="og:description" content="Wholesale gadgets, priced by the carton. Live inventory and tiered pricing." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="./brand/banner.svg" />
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-54HYSJY06E"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      // send_page_view is off because this is a single-page app: the router
+      // reports every screen itself (see src/lib/analytics.ts), including the
+      // first one. Leaving it on would double-count the landing page.
+      gtag('config', 'G-54HYSJY06E', { send_page_view: false });
+    </script>
   </head>
   <body>
     <div id="root"></div>

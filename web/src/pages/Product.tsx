@@ -7,6 +7,7 @@ import { ProductThumb } from '../components/ProductThumb';
 import { ProductCard } from '../components/ProductCard';
 import { Empty, Rating, Spinner, StockBadge } from '../components/ui';
 import { setDirectBuy, useCart } from '../lib/store';
+import { trackAddToCart, trackSelectItem, trackViewItem } from '../lib/analytics';
 
 /** Mirrors the Worker's tier resolution so the page can price instantly. */
 function unitPriceFor(product: ProductType, qty: number): number {
@@ -40,6 +41,7 @@ export function Product() {
         setProduct(res.product);
         setRelated(res.related);
         setQty(res.product.moq);
+        trackViewItem(res.product);
       })
       .catch((err: Error) => setError(err.message));
   }, [slug]);
@@ -218,6 +220,7 @@ export function Product() {
               className="btn primary lg block"
               disabled={!product.in_stock}
               onClick={() => {
+                trackSelectItem('Shop now', { ...product, qty });
                 setDirectBuy({
                   product_id: product.id,
                   qty,
@@ -234,7 +237,10 @@ export function Product() {
             <button
               className="btn ghost lg block"
               disabled={!product.in_stock}
-              onClick={() => cart.add(product, qty)}
+              onClick={() => {
+                cart.add(product, qty);
+                trackAddToCart(product, qty);
+              }}
             >
               Add to cart
             </button>

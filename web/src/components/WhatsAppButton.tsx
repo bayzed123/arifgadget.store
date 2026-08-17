@@ -5,6 +5,8 @@
  * dashboard without a redeploy.
  */
 
+import { trackContact } from '../lib/analytics';
+
 const DEFAULT_NUMBER = '01400-290828';
 
 /**
@@ -43,6 +45,7 @@ export function WhatsAppButton({ number, storeName }: { number?: string; storeNa
     <a
       className="wa-fab"
       href={href}
+      onClick={() => trackContact('whatsapp_float')}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={label}

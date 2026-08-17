@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useCart } from '../lib/store';
+import { trackRemoveFromCart, trackViewCart } from '../lib/analytics';
 import type { DeliveryZone, Quote } from '../lib/types';
 import { money, number } from '../lib/format';
 import { ProductThumb } from '../components/ProductThumb';
@@ -126,6 +127,17 @@ export function Cart() {
   const cart = useCart();
   const { quote, loading, error } = useQuote(cart.items);
 
+  // Reported once the server has priced the basket, so the value GA4 sees is
+  // the tier price the shopper is actually being offered.
+  const reportedCart = useRef('');
+  useEffect(() => {
+    if (!quote || quote.lines.length === 0) return;
+    const key = `${quote.subtotal}:${quote.lines.length}`;
+    if (reportedCart.current === key) return;
+    reportedCart.current = key;
+    trackViewCart(quote.lines, quote.subtotal);
+  }, [quote]);
+
   if (cart.items.length === 0) {
     return (
       <>
@@ -176,7 +188,10 @@ export function Cart() {
                       </Link>
                       <button
                         className="icon-btn"
-                        onClick={() => cart.remove(item.product_id)}
+                        onClick={() => {
+                          trackRemoveFromCart({ ...item, unit_price: unit });
+                          cart.remove(item.product_id);
+                        }}
                         aria-label={`Remove ${item.name}`}
                       >
                         ✕

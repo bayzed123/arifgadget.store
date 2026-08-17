@@ -3,6 +3,7 @@ import type { Product } from '../lib/types';
 import { money } from '../lib/format';
 import { ProductThumb } from './ProductThumb';
 import { setDirectBuy, useCart } from '../lib/store';
+import { trackAddToCart, trackSelectItem } from '../lib/analytics';
 
 export function ProductCard({ product }: { product: Product }) {
   const cart = useCart();
@@ -11,6 +12,7 @@ export function ProductCard({ product }: { product: Product }) {
 
   /** Straight to checkout with this item only — the cart is left untouched. */
   function buyNow() {
+    trackSelectItem('Shop now', product);
     setDirectBuy({
       product_id: product.id,
       qty: product.moq,
@@ -69,7 +71,10 @@ export function ProductCard({ product }: { product: Product }) {
           <button
             className="btn ghost sm"
             disabled={!product.in_stock}
-            onClick={() => cart.add(product)}
+            onClick={() => {
+              cart.add(product);
+              trackAddToCart(product, product.moq);
+            }}
             aria-label={`Add ${product.name} to cart`}
           >
             Add to cart

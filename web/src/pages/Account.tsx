@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { dateTime, money, number, orderStatus, ORDER_STATUS_TONE } from '../lib/format';
 import { useCustomer, useToast } from '../lib/store';
+import { trackLogin, trackSignUp } from '../lib/analytics';
 import type { PressItem } from '../lib/types';
 import { Empty, Spinner } from '../components/ui';
 
@@ -42,9 +43,11 @@ function AuthPanel() {
     try {
       if (mode === 'register') {
         await register({ name: form.name, phone: form.phone, password: form.password, email: form.email });
+        trackSignUp();
         toast('Account created', 'success');
       } else {
         await signIn(form.phone, form.password);
+        trackLogin();
         toast('Signed in', 'success');
       }
     } catch (err) {

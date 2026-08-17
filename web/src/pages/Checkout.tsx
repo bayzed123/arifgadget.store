@@ -1,9 +1,16 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { getDirectBuy, setDirectBuy, useCart, useCustomer, useToast } from '../lib/store';
 import { money, number } from '../lib/format';
 import type { DeliveryZone, StoreSettings } from '../lib/types';
+import {
+  trackAddPaymentInfo,
+  trackAddShippingInfo,
+  trackBeginCheckout,
+  trackContact,
+  trackPurchase,
+} from '../lib/analytics';
 import { Empty, Spinner } from '../components/ui';
 import { OrderSummary, useQuote } from './Cart';
 
@@ -113,6 +120,24 @@ export function Checkout() {
   const [error, setError] = useState('');
   const [placed, setPlaced] = useState<Placed | null>(null);
 
+  // One begin_checkout per visit to this screen, fired once the server has
+  // priced the basket so the reported value matches what will be charged.
+  const startedCheckout = useRef(false);
+  useEffect(() => {
+    if (placed || startedCheckout.current || !quote || quote.lines.length === 0) return;
+    startedCheckout.current = true;
+    trackBeginCheckout(quote.lines, quote.total);
+  }, [quote, placed]);
+
+  // The zone and the payment method each get their own funnel step, so the
+  // shop can see where a shopper stops.
+  const reportedZone = useRef('');
+  useEffect(() => {
+    if (placed || !quote || reportedZone.current === zone) return;
+    reportedZone.current = zone;
+    trackAddShippingInfo(quote.lines, quote.total, zone);
+  }, [zone, quote, placed]);
+
   /** The shop's receiving number for whichever mobile-banking method is picked. */
   const payNumber =
     form.payment_method === 'bkash'
@@ -143,6 +168,15 @@ export function Checkout() {
         },
       });
       setPlaced(res.order);
+      trackPurchase({
+        orderNo: res.order.order_no,
+        value: res.order.total,
+        shipping: quote?.shipping ?? 0,
+        tax: quote?.tax ?? 0,
+        items: quote?.lines ?? [],
+        paymentMethod: form.payment_method,
+        zone,
+      });
       if (direct) setDirectBuy(null);
       else cart.clear();
       toast('Order placed — we will call to confirm', 'success');
@@ -200,6 +234,7 @@ export function Checkout() {
             href={waHref}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => trackContact('whatsapp_order')}
             style={{ marginTop: 4 }}
           >
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
@@ -439,7 +474,10 @@ export function Checkout() {
                       name="payment"
                       value={option.key}
                       checked={form.payment_method === option.key}
-                      onChange={() => set('payment_method', option.key)}
+                      onChange={() => {
+                        set('payment_method', option.key);
+                        if (quote) trackAddPaymentInfo(quote.lines, quote.total, option.key);
+                      }}
                     />
                     <span>
                       <strong style={{ display: 'block', fontSize: '0.9rem' }}>{option.label}</strong>

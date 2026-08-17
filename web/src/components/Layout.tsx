@@ -10,6 +10,7 @@ import { WhatsAppButton } from './WhatsAppButton';
 import { MenuDrawer } from './MenuDrawer';
 import { BottomNav } from './BottomNav';
 import { OfferPopup } from './OfferPopup';
+import { trackPageView, trackSearch } from '../lib/analytics';
 
 export function Layout() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -26,6 +27,12 @@ export function Layout() {
 
   // Close the drawer whenever the route changes, including on back/forward.
   useEffect(() => setMenuOpen(false), [pathname, params]);
+
+  // The base tag has send_page_view off, so the router owns every page_view —
+  // including the first. Without this a single-page app reports one screen.
+  useEffect(() => {
+    trackPageView(pathname + (params.toString() ? `?${params}` : ''));
+  }, [pathname, params]);
 
   useEffect(() => {
     api<{ categories: Category[] }>('/api/categories')
@@ -57,6 +64,7 @@ export function Layout() {
   function search(event: FormEvent) {
     event.preventDefault();
     const trimmed = query.trim();
+    if (trimmed) trackSearch(trimmed);
     navigate(trimmed ? `/catalog?q=${encodeURIComponent(trimmed)}` : '/catalog');
   }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api, mediaUrl } from '../lib/api';
+import { trackOfferClick } from '../lib/analytics';
 
 interface Banner {
   id: number;
@@ -114,11 +115,27 @@ export function OfferPopup() {
           <div className="row gap-8 wrap-row" style={{ marginTop: 6 }}>
             {banner.link_url &&
               (internal ? (
-                <Link to={banner.link_url} className="btn primary" onClick={dismiss}>
+                <Link
+                  to={banner.link_url}
+                  className="btn primary"
+                  onClick={() => {
+                    trackOfferClick(banner.title);
+                    dismiss();
+                  }}
+                >
                   {banner.cta_label || 'Shop the offer'}
                 </Link>
               ) : (
-                <a href={banner.link_url} target="_blank" rel="noopener noreferrer" className="btn primary" onClick={dismiss}>
+                <a
+                  href={banner.link_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn primary"
+                  onClick={() => {
+                    trackOfferClick(banner.title);
+                    dismiss();
+                  }}
+                >
                   {banner.cta_label || 'Shop the offer'}
                 </a>
               ))}
