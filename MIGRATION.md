@@ -15,7 +15,7 @@ then.
 
 | Resource | Name | Status |
 |---|---|---|
-| D1 database | `arif-gadgets` | `3c619937-10e9-43ec-9e9f-c0fd0c1da71c` — created, empty, ready for migrations |
+| D1 database | `arif-gadgets` | `3c619937-10e9-43ec-9e9f-c0fd0c1da71c` — **built: all 12 migrations applied and verified** |
 | KV namespace | `arif-gadgets-cache` | `a7c032dadfd54f89afd5b01134ec8973` — created |
 | R2 bucket | `arif-gadgets-media` | not created — R2 is not switched on for this account |
 | Worker | `arif-gadgets-api` | not deployed yet |
@@ -23,6 +23,43 @@ then.
 
 The deploy finds the database and namespace by name and fills `wrangler.toml`
 in automatically; nothing in that table needs copying by hand.
+
+### What the database holds
+
+Built statement by statement and checked afterwards:
+
+| | |
+|---|---|
+| Tables / triggers / views / indexes | 17 / 8 / 2 / 29 |
+| Categories | 8 |
+| Products | 31, every one at MOQ 1 |
+| Volume price tiers | 27 |
+| Content pages | 13 (company + policy) |
+| Offer banners | 1 starter banner |
+| Settings | 25 |
+| Opening stock ledger rows | 30 |
+| Orders / customers / admins | 0 — nothing but a clean shop |
+
+Delivery is ৳90 inside Dhaka and ৳130 elsewhere, free-delivery threshold ৳5000,
+the payment numbers and WhatsApp order line are in place, and the footer
+credits read SmartGen / Sayad Bayezid.
+
+`d1_migrations` already records all twelve files, so `wrangler d1 migrations
+apply` will report nothing to do rather than trying to build it a second time.
+
+### The automated calculation was tested on this database
+
+A throwaway order was pushed through the full checkpoint chain and then
+removed, leaving the counts above unchanged:
+
+- 3 × ৳1150 → subtotal ৳3450, cost ৳2550, delivery ৳90 (Dhaka), total ৳3540,
+  profit ৳900, margin 26.09%
+- stock 150 → 147 and `units_sold` 0 → 3 on the sale
+- `pending → confirmed → shipped → delivered` flipped `counts_as_sale` and the
+  daily sales view picked up the revenue, cost and profit
+- `refunded` ("Returned") put all three units back, reversed `units_sold`, and
+  removed the revenue from the daily view again
+- the ledger recorded exactly one `sale` and one `return`
 
 **R2** stays optional. Without it, image *upload* in the dashboard returns a
 clear "storage is not enabled" message and pasting an image URL works as
@@ -72,26 +109,32 @@ account's name cannot be reused while that account still holds it.
 2. Confirm `CLOUD_FLARE_ACCOUNT_ID` and `CLOUD_FLARE_API` hold the **new**
    account's values.
 3. Run **Cloudflare doctor**. Every line should be green.
-4. Run **Deploy**. It applies all eleven migrations to the empty database,
-   deploys the Worker, generates `JWT_SECRET`, creates the dashboard owner from
-   `ADMIN_USERNAME` / `ADMIN_PASSWORD`, then rebuilds the storefront against the
-   new API address.
+4. Run **Deploy**. The database is already built, so migrations report nothing
+   to do; the deploy then puts the Worker on the new account, generates
+   `JWT_SECRET`, creates the dashboard owner from `ADMIN_USERNAME` /
+   `ADMIN_PASSWORD`, and rebuilds the storefront against the new API address.
 5. Check the shop: place a test order, track it by phone number, open the
    invoice, sign in to the dashboard.
 
-## What the fresh database contains
+## The dashboard owner
 
-The migrations rebuild a complete, working shop — 8 categories, 27 catalogue
-products with stock, cost and retail prices, wholesale price tiers, all store
-settings (delivery ৳90 inside Dhaka / ৳130 outside, payment numbers, contact
-details, the fixed footer credits) and the published content pages.
+There is deliberately no admin account in the database yet. The password
+belongs in the `ADMIN_PASSWORD` repository secret and nowhere else — not in a
+migration, not in this file, not in a chat message — and `create-admin.mjs`
+provisions the owner from that secret on the first successful deploy. Until
+then the Worker does not exist, so there is nothing to sign in to.
 
-What it does **not** contain is the old account's live trading data: the six
-products the client added by hand, sixteen orders, two customer accounts and
-their stock history. That is not lost — it is in the **Backup database**
-artifact `d1-backup-20260818-120910` from run `32135307690`, kept for the
-artifact retention period. If the client later wants any of it, restore from
-there rather than re-entering it.
+The same script re-runs on every deploy and resets the owner's password to
+whatever the secret currently holds, which is also how the password gets
+rotated: change the secret, run Deploy.
+
+## What the fresh database does not contain
+
+The old account's live trading data: the two products the client added by hand,
+sixteen orders, two customer accounts and their stock history. That is not
+lost — it is in the **Backup database** artifact `d1-backup-20260818-120910`
+from run `32135307690`, kept for the artifact retention period. If the client
+later wants any of it, restore from there rather than re-entering it.
 
 ## Rollback
 
