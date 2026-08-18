@@ -28,6 +28,11 @@ on:
 jobs:
   restore:
     runs-on: ubuntu-latest
+    # actions:read is what lets download-artifact reach a *different* run's
+    # artifact; without it the fetch 403s and the restore never starts.
+    permissions:
+      contents: read
+      actions: read
     env:
       # Prefer the dedicated destination secrets so the account still serving
       # the shop stays reachable for rollback. Falls back to the primary pair
