@@ -18,6 +18,9 @@ on:
       backup_run_id:
         description: Run ID of the "Backup database" workflow that produced the dump
         required: true
+      expected_database_id:
+        description: UUID of the destination D1 database. The run aborts unless the account really holds this database, so a mis-set secret can never drop the live one.
+        required: true
       confirm:
         description: Type RESTORE to confirm this overwrites the destination database
         required: true
@@ -26,8 +29,12 @@ jobs:
   restore:
     runs-on: ubuntu-latest
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUD_FLARE_API_NEW }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUD_FLARE_ACCOUNT_ID_NEW }}
+      # Prefer the dedicated destination secrets so the account still serving
+      # the shop stays reachable for rollback. Falls back to the primary pair
+      # for the case where the main secrets have already been switched over —
+      # the database-ID check below is what actually keeps this safe.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUD_FLARE_API_NEW || secrets.CLOUD_FLARE_API }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUD_FLARE_ACCOUNT_ID_NEW || secrets.CLOUD_FLARE_ACCOUNT_ID }}
     steps:
       - name: Refuse unless confirmed
         run: |
@@ -36,7 +43,7 @@ jobs:
             exit 1
           fi
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::error::Set CLOUD_FLARE_API_NEW and CLOUD_FLARE_ACCOUNT_ID_NEW first (Settings → Secrets and variables → Actions)."
+            echo "::error::No Cloudflare credentials. Add CLOUD_FLARE_API_NEW and CLOUD_FLARE_ACCOUNT_ID_NEW (Settings → Secrets and variables → Actions)."
             exit 1
           fi
 
@@ -64,19 +71,26 @@ jobs:
           done
           echo "Dump looks complete: $(du -h "$FILE" | cut -f1)"
 
-      - name: Create the destination database if it does not exist
+      - name: Confirm we are pointed at the destination, not the live account
         working-directory: worker
         run: |
-          if npx wrangler d1 list --json | grep -q '"arif-gadgets"'; then
-            echo "Database already exists in the destination account."
-          else
+          if ! npx wrangler d1 list --json | grep -q '"arif-gadgets"'; then
             npx wrangler d1 create arif-gadgets
           fi
           ID=$(npx wrangler d1 list --json | node -e '
             let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
               process.stdout.write(JSON.parse(s).find(d=>d.name==="arif-gadgets").uuid);
             });')
-          echo "Destination database $ID"
+
+          # The single most dangerous step in this repo is the DROP below. It
+          # only runs if the account we authenticated into holds exactly the
+          # database the operator named, so a stale or mistyped secret stops
+          # here instead of emptying the shop.
+          if [ "$ID" != "${{ inputs.expected_database_id }}" ]; then
+            echo "::error::Refusing to continue. This account's arif-gadgets database is $ID, but you asked for ${{ inputs.expected_database_id }}. Check which credentials are in use before retrying."
+            exit 1
+          fi
+          echo "Destination confirmed: $ID"
           node -e '
             const fs=require("fs");const f="wrangler.toml";
             fs.writeFileSync(f, fs.readFileSync(f,"utf8")
