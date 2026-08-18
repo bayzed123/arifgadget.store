@@ -1,0 +1,120 @@
+name: Restore database to a new Cloudflare account
+
+# The second half of an account migration. Takes a dump produced by the
+# "Backup database" workflow and loads it into a *new* Cloudflare account,
+# using a second pair of secrets so the old account is never touched.
+#
+# Required secrets before running:
+#   CLOUD_FLARE_API_NEW         API token for the destination account
+#   CLOUD_FLARE_ACCOUNT_ID_NEW  destination account ID
+#
+# The dump carries the schema, the data and the d1_migrations bookkeeping, so
+# the destination database is a clone: later deploys apply no migrations
+# because the table already records them as run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_run_id:
+        description: Run ID of the "Backup database" workflow that produced the dump
+        required: true
+      confirm:
+        description: Type RESTORE to confirm this overwrites the destination database
+        required: true
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUD_FLARE_API_NEW }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUD_FLARE_ACCOUNT_ID_NEW }}
+    steps:
+      - name: Refuse unless confirmed
+        run: |
+          if [ "${{ inputs.confirm }}" != "RESTORE" ]; then
+            echo "::error::Type RESTORE in the confirm box to run this. It replaces the destination database."
+            exit 1
+          fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Set CLOUD_FLARE_API_NEW and CLOUD_FLARE_ACCOUNT_ID_NEW first (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Fetch the backup
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.backup_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: backup
+          merge-multiple: true
+
+      - name: Check the dump looks complete
+        run: |
+          FILE=$(ls backup/*.sql | head -1)
+          echo "DUMP=$FILE" >> "$GITHUB_ENV"
+          for t in settings products orders order_items customers; do
+            grep -q "CREATE TABLE .*${t}" "$FILE" || { echo "::error::$t missing from the dump"; exit 1; }
+          done
+          echo "Dump looks complete: $(du -h "$FILE" | cut -f1)"
+
+      - name: Create the destination database if it does not exist
+        working-directory: worker
+        run: |
+          if npx wrangler d1 list --json | grep -q '"arif-gadgets"'; then
+            echo "Database already exists in the destination account."
+          else
+            npx wrangler d1 create arif-gadgets
+          fi
+          ID=$(npx wrangler d1 list --json | node -e '
+            let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+              process.stdout.write(JSON.parse(s).find(d=>d.name==="arif-gadgets").uuid);
+            });')
+          echo "Destination database $ID"
+          node -e '
+            const fs=require("fs");const f="wrangler.toml";
+            fs.writeFileSync(f, fs.readFileSync(f,"utf8")
+              .replace(/database_id = "[^"]*"/, `database_id = "${process.argv[1]}"`));
+          ' "$ID"
+
+      - name: Empty the destination, then load the dump
+        working-directory: worker
+        run: |
+          # A fresh database may already hold seed rows from a deploy that ran
+          # first. Drop every object so the dump lands on clean ground and the
+          # result is a true clone rather than a merge.
+          npx wrangler d1 execute arif-gadgets --remote --yes --command "
+            PRAGMA defer_foreign_keys = TRUE;
+            DROP TABLE IF EXISTS audit_log; DROP TABLE IF EXISTS stock_movements;
+            DROP TABLE IF EXISTS order_items; DROP TABLE IF EXISTS orders;
+            DROP TABLE IF EXISTS price_tiers; DROP TABLE IF EXISTS products;
+            DROP TABLE IF EXISTS categories; DROP TABLE IF EXISTS customers;
+            DROP TABLE IF EXISTS admins; DROP TABLE IF EXISTS settings;
+            DROP TABLE IF EXISTS pages; DROP TABLE IF EXISTS posts;
+            DROP TABLE IF EXISTS press; DROP TABLE IF EXISTS banners;
+            DROP TABLE IF EXISTS d1_migrations;"
+
+          npx wrangler d1 execute arif-gadgets --remote --yes --file "../${DUMP}"
+
+      - name: Verify the clone
+        working-directory: worker
+        run: |
+          npx wrangler d1 execute arif-gadgets --remote --json --command "
+            SELECT (SELECT COUNT(*) FROM products) products,
+                   (SELECT COUNT(*) FROM orders) orders,
+                   (SELECT COUNT(*) FROM order_items) order_items,
+                   (SELECT COUNT(*) FROM customers) customers,
+                   (SELECT COUNT(*) FROM settings) settings,
+                   (SELECT COUNT(*) FROM stock_movements) stock_movements" | tee /tmp/counts.json
+          echo "### Restored into the new account" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/counts.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Compare these against the backup run's summary before switching the live secrets." >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,78 @@
+name: Backup database
+
+# Run this before any Cloudflare account migration, and any time you want a
+# copy of the shop's data. It produces a complete SQL dump — schema, data,
+# triggers, indexes and the migration bookkeeping — as a downloadable artifact.
+#
+# The dump contains customer names, phone numbers, addresses and password
+# hashes, so it is never committed to the repository. It lives only as a
+# workflow artifact, which GitHub keeps private to people with repo access.
+
+on:
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: How many days to keep the downloadable backup
+        default: '30'
+        required: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUD_FLARE_API }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUD_FLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Point wrangler at the live database
+        working-directory: worker
+        run: |
+          ID=$(npx wrangler d1 list --json | node -e '
+            let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+              const db=JSON.parse(s).find(d=>d.name==="arif-gadgets");
+              if(!db){console.error("no arif-gadgets database in this account");process.exit(1);}
+              process.stdout.write(db.uuid);
+            });')
+          echo "Found database $ID"
+          node -e '
+            const fs=require("fs");
+            const f="wrangler.toml";
+            fs.writeFileSync(f, fs.readFileSync(f,"utf8")
+              .replace(/database_id = "[^"]*"/, `database_id = "${process.argv[1]}"`));
+          ' "$ID"
+
+      - name: Export schema and data
+        working-directory: worker
+        run: |
+          mkdir -p ../backup
+          STAMP=$(date -u +%Y%m%d-%H%M%S)
+          npx wrangler d1 export arif-gadgets --remote --output="../backup/arif-gadgets-${STAMP}.sql"
+          ls -lh ../backup
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+
+      - name: Summarise what was captured
+        run: |
+          FILE=$(ls backup/*.sql | head -1)
+          echo "### Database backup taken" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Table | Rows in dump |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          for t in settings categories products price_tiers orders order_items \
+                   stock_movements admins customers pages posts press banners audit_log; do
+            n=$(grep -c "^INSERT INTO \"\?${t}\"\? " "$FILE" || true)
+            echo "| $t | $n |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Size: $(du -h "$FILE" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: d1-backup-${{ env.STAMP }}
+          path: backup/*.sql
+          retention-days: ${{ inputs.retention_days || '30' }}
