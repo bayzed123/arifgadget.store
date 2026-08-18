@@ -270,3 +270,74 @@ analytics.get('/inventory', async (c) => {
     recent_movements: movements ?? [],
   });
 });
+
+/**
+ * Courier performance: how many parcels arrived, how many came back, and where
+ * the cash on delivery stands.
+ *
+ * The counts are read from `courier_status` — the courier's own word — rather
+ * than from the shop's checkpoints, because the two legitimately disagree for a
+ * while. A parcel Steadfast has marked delivered but not yet approved is real
+ * money in transit that the shop's own status has correctly not recognised yet,
+ * and hiding that gap would make the figures useless for chasing payment.
+ *
+ * Only cash-on-delivery orders carry a COD amount, so "collected" and
+ * "outstanding" are about cash the courier owes the shop — not about revenue,
+ * which the sales reports already cover.
+ */
+analytics.get('/courier', async (c) => {
+  const window = days(c);
+  const from = Math.floor(Date.now() / 1000) - window * 86400;
+
+  const summary = await c.env.DB.prepare(
+    `SELECT
+       COUNT(*)                                                              AS booked,
+       SUM(CASE WHEN courier_status IN ('delivered','partial_delivered')
+                THEN 1 ELSE 0 END)                                           AS delivered,
+       SUM(CASE WHEN courier_status = 'cancelled' THEN 1 ELSE 0 END)         AS returned,
+       SUM(CASE WHEN courier_status IN ('pending','in_review','hold')
+                THEN 1 ELSE 0 END)                                           AS in_transit,
+       SUM(CASE WHEN courier_status LIKE '%_approval' THEN 1 ELSE 0 END)     AS awaiting_approval,
+       COALESCE(SUM(courier_cod_amount), 0)                                  AS cod_booked,
+       COALESCE(SUM(CASE WHEN courier_status IN ('delivered','partial_delivered')
+                         THEN courier_cod_amount ELSE 0 END), 0)             AS cod_collected,
+       COALESCE(SUM(CASE WHEN courier_status NOT IN ('delivered','partial_delivered','cancelled')
+                         THEN courier_cod_amount ELSE 0 END), 0)             AS cod_outstanding
+     FROM orders
+    WHERE consignment_id <> '' AND created_at >= ? AND created_at < ?`,
+  )
+    .bind(from, OPEN_ENDED)
+    .first<Record<string, number>>();
+
+  const booked = summary?.booked ?? 0;
+  const delivered = summary?.delivered ?? 0;
+  const returned = summary?.returned ?? 0;
+  const settled = delivered + returned;
+
+  const { results: recent } = await c.env.DB.prepare(
+    `SELECT id, order_no, customer_name, customer_phone, city, status, total,
+            courier_status, tracking_code, consignment_id, courier_cod_amount, courier_synced_at
+       FROM orders
+      WHERE consignment_id <> ''
+      ORDER BY created_at DESC
+      LIMIT 30`,
+  ).all();
+
+  return c.json({
+    period_days: window,
+    booked,
+    delivered,
+    returned,
+    in_transit: summary?.in_transit ?? 0,
+    awaiting_approval: summary?.awaiting_approval ?? 0,
+    // Share of parcels that reached the customer, counting only those the
+    // courier has actually finished with. Measuring against every booked parcel
+    // would drag the rate down purely because today's deliveries are still out.
+    success_rate: settled > 0 ? Math.round((delivered / settled) * 1000) / 10 : 0,
+    return_rate: settled > 0 ? Math.round((returned / settled) * 1000) / 10 : 0,
+    cod_booked: summary?.cod_booked ?? 0,
+    cod_collected: summary?.cod_collected ?? 0,
+    cod_outstanding: summary?.cod_outstanding ?? 0,
+    parcels: recent ?? [],
+  });
+});

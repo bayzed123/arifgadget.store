@@ -102,3 +102,40 @@ const STATUS_LABELS: Record<string, string> = {
 export function orderStatus(status: string): string {
   return STATUS_LABELS[status] ?? status;
 }
+
+/**
+ * Steadfast's delivery vocabulary in plain words. Wider than the shop's own
+ * checkpoints on purpose: "awaiting approval" and "on hold" are exactly the
+ * states staff need to see, and they justify no checkpoint change at all.
+ */
+const COURIER_LABELS: Record<string, string> = {
+  pending: 'With courier',
+  in_review: 'In review',
+  hold: 'On hold',
+  delivered_approval: 'Delivered — awaiting approval',
+  partial_delivered_approval: 'Partly delivered — awaiting approval',
+  cancelled_approval: 'Returned — awaiting approval',
+  unknown_approval: 'Unknown — awaiting approval',
+  delivered: 'Delivered',
+  partial_delivered: 'Partly delivered',
+  cancelled: 'Returned to shop',
+  unknown: 'Unknown',
+};
+
+export function courierStatus(status: string): string {
+  return COURIER_LABELS[status] ?? status;
+}
+
+export const COURIER_TONE: Record<string, 'ok' | 'low' | 'out' | 'info' | 'brand'> = {
+  pending: 'info',
+  in_review: 'info',
+  hold: 'low',
+  delivered_approval: 'brand',
+  partial_delivered_approval: 'low',
+  cancelled_approval: 'low',
+  unknown_approval: 'low',
+  delivered: 'ok',
+  partial_delivered: 'low',
+  cancelled: 'out',
+  unknown: 'low',
+};

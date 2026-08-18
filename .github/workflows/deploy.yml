@@ -69,6 +69,10 @@ jobs:
       - name: Ensure Worker secrets
         env:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          # Steadfast courier. Optional: unset simply leaves the courier panel
+          # reporting itself as not connected.
+          STEADFAST_API_KEY: ${{ secrets.STEADFAST_API_KEY }}
+          STEADFAST_SECRET_KEY: ${{ secrets.STEADFAST_SECRET_KEY }}
         run: node scripts/provision-secrets.mjs
 
       - name: Provision the dashboard owner

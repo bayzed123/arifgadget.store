@@ -145,7 +145,7 @@ See the EMI and Payment Policy page.
 We dispatch within 48 hours of confirming an order. Courier transit is usually one to three days depending on district.
 
 **How much is delivery?**
-A flat charge shown at checkout, free above the threshold displayed in your cart.
+৳90 inside Dhaka and ৳130 anywhere else in Bangladesh. You choose your zone at checkout and the total updates straight away.
 
 ## After the sale
 
@@ -273,7 +273,12 @@ These are courier estimates, not guarantees. We chase late deliveries on your be
 
 ## Charges
 
-A flat delivery charge applies, shown in your cart before you order. Orders above the threshold displayed at checkout ship free. Bulk and carton orders may be quoted separately where weight or volume demands it.
+Delivery is charged by zone, which you choose at checkout:
+
+- **Inside Dhaka** — ৳90
+- **Anywhere else in Bangladesh** — ৳130
+
+The charge appears in your cart before you order. Bulk and carton orders may be quoted separately where weight or volume demands it.
 
 ## Coverage
 

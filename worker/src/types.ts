@@ -10,6 +10,15 @@ export interface Env {
   JWT_SECRET?: string;
   STORE_NAME: string;
   ALLOWED_ORIGINS: string;
+  /**
+   * Steadfast courier credentials, set as Worker secrets by the deploy. Both
+   * optional: without them the courier panel reports itself as not connected
+   * and every other part of the shop carries on unchanged.
+   */
+  STEADFAST_API_KEY?: string;
+  STEADFAST_SECRET_KEY?: string;
+  /** Override for the courier's base URL. Only useful for their sandbox. */
+  STEADFAST_BASE_URL?: string;
 }
 
 export interface AdminClaims {
