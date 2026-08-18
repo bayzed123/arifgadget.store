@@ -25,6 +25,42 @@ const WORKER_NAME = process.env.WORKER_NAME ?? 'arif-gadgets-api';
 
 const cf = client();
 
+/**
+ * Listing D1 databases needs only read access; running a statement against one
+ * needs D1: Edit. A token holding just the first sails through provisioning and
+ * then dies in `wrangler d1 migrations apply` with "You do not have permission
+ * to perform this operation. [code: 7500]", which names neither the permission
+ * nor where to grant it. One harmless SELECT here turns that into an answer.
+ */
+async function assertD1Writable(databaseId) {
+  try {
+    await cf.call(`/d1/database/${databaseId}/query`, { method: 'POST', body: { sql: 'SELECT 1' } });
+  } catch (err) {
+    const denied = (err.errors ?? []).some((e) => e.code === 7500 || e.code === 10000);
+    if (!denied) throw err;
+
+    console.error('');
+    console.error('  ┌────────────────────────────────────────────────────────────────┐');
+    console.error('  │  The API token cannot run statements against D1.               │');
+    console.error('  │                                                                │');
+    console.error('  │  It reached the right account and listed the database, so the  │');
+    console.error('  │  account ID is correct — the permission is what is short.      │');
+    console.error('  │  Every migration runs through this endpoint, so the deploy     │');
+    console.error('  │  would fail a few seconds from now with a bare "code: 7500".   │');
+    console.error('  │                                                                │');
+    console.error('  │  Fix it once: Cloudflare dashboard → My Profile → API Tokens   │');
+    console.error('  │  → your token → Edit → add Account · D1 · Edit. Or create a    │');
+    console.error('  │  new token from the "Edit Cloudflare Workers" template, which  │');
+    console.error('  │  covers Workers, KV, D1 and R2 together, and paste it into     │');
+    console.error('  │  the CLOUD_FLARE_API repository secret.                        │');
+    console.error('  │                                                                │');
+    console.error('  │  Run the "Cloudflare doctor" workflow to re-check everything.  │');
+    console.error('  └────────────────────────────────────────────────────────────────┘');
+    console.error('');
+    process.exit(1);
+  }
+}
+
 async function ensureD1() {
   const existing = await cf.call(`/d1/database?name=${encodeURIComponent(D1_NAME)}&per_page=50`);
   const match = (existing ?? []).find((db) => db.name === D1_NAME);
@@ -186,6 +222,7 @@ function removeTomlTable(source, table) {
 console.log('\nProvisioning Cloudflare resources\n');
 
 const [databaseId, kvId] = await Promise.all([ensureD1(), ensureKV()]);
+await assertD1Writable(databaseId);
 const r2Ready = await ensureR2();
 
 let toml = readFileSync(WRANGLER, 'utf8');
