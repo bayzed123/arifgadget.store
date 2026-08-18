@@ -1,0 +1,26 @@
+name: Cloudflare doctor
+
+# Run this by hand whenever a deploy fails with a Cloudflare permission error.
+# It probes every capability the deploy needs and prints the exact dashboard
+# change for each failure, so the token is repaired in one visit.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doctor:
+    name: Check the account and token
+    runs-on: ubuntu-latest
+    env:
+      CLOUD_FLARE_API: ${{ secrets.CLOUD_FLARE_API }}
+      CLOUD_FLARE_ACCOUNT_ID: ${{ secrets.CLOUD_FLARE_ACCOUNT_ID }}
+      API_DOMAIN: ${{ vars.API_DOMAIN }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/cf-doctor.mjs
