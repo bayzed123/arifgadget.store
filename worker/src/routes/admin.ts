@@ -16,6 +16,16 @@ import {
 } from '../lib/http';
 import { hashPassword, randomSalt, signToken, verifyPassword, verifyToken } from '../lib/auth';
 import { PRODUCT_COLUMNS, loadTiers, toAdminProduct, type ProductRow } from '../lib/catalog';
+import {
+  checkpointFor,
+  codAmountFor,
+  courierBalance,
+  courierConfigured,
+  courierLabel,
+  createConsignment,
+  statusByConsignment,
+  statusByInvoice,
+} from '../lib/steadfast';
 
 const SESSION_HOURS = 12;
 /**
@@ -533,6 +543,8 @@ admin.get('/orders', async (c) => {
     `SELECT o.id, o.order_no, o.customer_name, o.customer_phone, o.city, o.status,
             o.subtotal, o.discount, o.shipping, o.tax, o.total, o.cost_total, o.profit,
             o.margin_pct, o.payment_method, o.payment_reference, o.delivery_zone, o.created_at,
+            o.courier, o.consignment_id, o.tracking_code, o.courier_status,
+            o.courier_cod_amount, o.courier_synced_at,
             (SELECT COALESCE(SUM(qty),0) FROM order_items WHERE order_id = o.id) AS units
        FROM orders o WHERE ${whereSql}
       ORDER BY o.created_at DESC LIMIT ? OFFSET ?`,
@@ -777,4 +789,239 @@ admin.get('/audit', async (c) => {
     .bind(limit)
     .all();
   return c.json({ entries: results ?? [] });
+});
+
+/* ══════════════════════════ Steadfast courier ══════════════════════════
+ *
+ * The courier knows things the dashboard cannot: whether a parcel was
+ * delivered, whether it came back, and whether the cash was collected. These
+ * routes are the shop's side of that conversation.
+ *
+ * Nothing here books a parcel on its own. Creating a consignment costs real
+ * money and puts a real van on a real road, so it is always an explicit action
+ * by a member of staff — never a side effect of an order arriving.
+ */
+
+/** Row shape the courier helpers need. */
+interface CourierOrderRow {
+  id: number;
+  order_no: string;
+  status: string;
+  consignment_id: string;
+}
+
+/**
+ * Moves an order to the checkpoint a courier status justifies, if the move is
+ * legal from where the order stands.
+ *
+ * Deliberately routed through the same NEXT_STATUSES table as the manual
+ * dashboard control rather than writing the status directly. A courier saying
+ * "cancelled" for an order already marked Returned must not restock the same
+ * units twice, and an external system is exactly the kind of caller that will
+ * eventually say something twice.
+ *
+ * @returns the checkpoint moved to, or null if nothing changed.
+ */
+async function applyCourierCheckpoint(
+  env: Env,
+  order: CourierOrderRow,
+  courierStatus: string,
+  actor: string,
+): Promise<string | null> {
+  const target = checkpointFor(courierStatus);
+  if (!target || target === order.status) return null;
+
+  const allowed = NEXT_STATUSES[order.status] ?? [];
+  if (!allowed.includes(target)) return null;
+
+  await env.DB.prepare('UPDATE orders SET status = ? WHERE id = ?').bind(target, order.id).run();
+  await audit(
+    env,
+    actor,
+    'order.courier',
+    'order',
+    order.id,
+    `${order.order_no}: ${label(order.status)} → ${label(target)} (Steadfast said "${courierStatus}")`,
+  );
+  return target;
+}
+
+/**
+ * Asks the courier where one parcel is and records the answer.
+ *
+ * The raw courier status is always stored, whether or not it moves the order —
+ * "on hold" and "awaiting approval" are precisely the states staff need to see,
+ * and they justify no checkpoint change at all.
+ */
+async function syncOne(
+  env: Env,
+  order: CourierOrderRow,
+  actor: string,
+): Promise<{ order_no: string; courier_status?: string; moved_to?: string; error?: string }> {
+  const lookup = order.consignment_id
+    ? await statusByConsignment(env, order.consignment_id)
+    : await statusByInvoice(env, order.order_no);
+
+  if (!lookup.ok) return { order_no: order.order_no, error: lookup.error };
+
+  await env.DB.prepare(
+    "UPDATE orders SET courier_status = ?, courier_synced_at = strftime('%s','now') WHERE id = ?",
+  )
+    .bind(lookup.data, order.id)
+    .run();
+
+  const moved = await applyCourierCheckpoint(env, order, lookup.data, actor);
+  return { order_no: order.order_no, courier_status: lookup.data, ...(moved ? { moved_to: moved } : {}) };
+}
+
+/**
+ * Connection check. Reads the courier account balance, which proves both keys
+ * are right without booking anything, so staff can press it as often as they
+ * like. Never returns the keys themselves.
+ */
+admin.get('/courier', async (c) => {
+  if (!courierConfigured(c.env)) {
+    return c.json({
+      connected: false,
+      balance: null,
+      message:
+        'Steadfast is not connected. The two keys are set as Worker secrets by the deploy — add STEADFAST_API_KEY and STEADFAST_SECRET_KEY to the repository secrets and deploy again.',
+    });
+  }
+
+  const balance = await courierBalance(c.env);
+  return c.json({
+    connected: balance.ok,
+    balance: balance.ok ? balance.data : null,
+    message: balance.ok ? '' : balance.error,
+  });
+});
+
+/** Books one order with Steadfast. Explicit staff action, never automatic. */
+admin.post('/orders/:id/courier', async (c) => {
+  const id = Number(c.req.param('id'));
+
+  const order = await c.env.DB.prepare(
+    `SELECT id, order_no, status, consignment_id, customer_name, customer_phone,
+            address, city, note, payment_method, total
+       FROM orders WHERE id = ?`,
+  )
+    .bind(id)
+    .first<
+      CourierOrderRow & {
+        customer_name: string;
+        customer_phone: string;
+        address: string;
+        city: string;
+        note: string;
+        payment_method: string;
+        total: number;
+      }
+    >();
+  if (!order) notFound('Order not found');
+
+  // Booking twice would put two vans on the road and two charges on the bill.
+  if (order.consignment_id) {
+    conflict(`This order is already with Steadfast (consignment ${order.consignment_id}).`);
+  }
+  if (order.status === 'cancelled' || order.status === 'refunded') {
+    badRequest(`"${label(order.status)}" orders cannot be sent to the courier.`);
+  }
+
+  const { results } = await c.env.DB.prepare('SELECT name, qty FROM order_items WHERE order_id = ?')
+    .bind(id)
+    .all<{ name: string; qty: number }>();
+  const description = (results ?? []).map((line) => `${line.qty} × ${line.name}`).join(', ') || 'Gadgets';
+
+  const booked = await createConsignment(c.env, order, description);
+  if (!booked.ok) {
+    // The courier refusing a booking is not a bug in this shop, so it is
+    // reported as an upstream failure with their wording intact.
+    throw new HTTPException(502, { message: booked.error });
+  }
+
+  const cod = codAmountFor(order);
+  await c.env.DB.prepare(
+    `UPDATE orders
+        SET courier = 'steadfast', consignment_id = ?, tracking_code = ?, courier_status = ?,
+            courier_cod_amount = ?, courier_synced_at = strftime('%s','now')
+      WHERE id = ?`,
+  )
+    .bind(String(booked.data.consignment_id), booked.data.tracking_code ?? '', booked.data.status ?? 'pending', cod, id)
+    .run();
+
+  await audit(
+    c.env,
+    c.get('admin').username,
+    'order.courier.book',
+    'order',
+    id,
+    `${order.order_no} sent to Steadfast — consignment ${booked.data.consignment_id}, COD ৳${(cod / 100).toFixed(2)}`,
+  );
+
+  const moved = await applyCourierCheckpoint(c.env, order, booked.data.status ?? 'pending', c.get('admin').username);
+
+  return c.json({
+    consignment_id: String(booked.data.consignment_id),
+    tracking_code: booked.data.tracking_code ?? '',
+    courier_status: booked.data.status ?? 'pending',
+    courier_status_label: courierLabel(booked.data.status ?? 'pending'),
+    cod_amount: cod,
+    moved_to: moved,
+  });
+});
+
+/** Refreshes one order from the courier. */
+admin.post('/orders/:id/courier/sync', async (c) => {
+  const id = Number(c.req.param('id'));
+  const order = await c.env.DB.prepare('SELECT id, order_no, status, consignment_id FROM orders WHERE id = ?')
+    .bind(id)
+    .first<CourierOrderRow>();
+  if (!order) notFound('Order not found');
+  if (!order.consignment_id) badRequest('This order has not been sent to Steadfast yet.');
+
+  const result = await syncOne(c.env, order, c.get('admin').username);
+  if (result.error) throw new HTTPException(502, { message: result.error });
+
+  return c.json({
+    ...result,
+    courier_status_label: courierLabel(result.courier_status ?? ''),
+  });
+});
+
+/**
+ * Refreshes every parcel still in flight.
+ *
+ * Bounded on purpose. A Worker gets a limited number of outbound requests per
+ * invocation, so this takes the oldest un-settled parcels a batch at a time
+ * rather than trying to walk the whole history and dying halfway.
+ */
+admin.post('/courier/sync', async (c) => {
+  if (!courierConfigured(c.env)) badRequest('Steadfast is not connected.');
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT id, order_no, status, consignment_id
+       FROM orders
+      WHERE consignment_id <> ''
+        AND status NOT IN ('delivered', 'refunded', 'cancelled')
+      ORDER BY courier_synced_at IS NOT NULL, courier_synced_at ASC, id ASC
+      LIMIT 20`,
+  ).all<CourierOrderRow>();
+
+  const pending = results ?? [];
+  const synced: Awaited<ReturnType<typeof syncOne>>[] = [];
+
+  // Four at a time: fast enough to feel instant on a normal day's orders,
+  // slow enough to stay well inside the Worker's subrequest allowance.
+  for (let i = 0; i < pending.length; i += 4) {
+    const batch = pending.slice(i, i + 4);
+    synced.push(...(await Promise.all(batch.map((order) => syncOne(c.env, order, c.get('admin').username)))));
+  }
+
+  return c.json({
+    checked: synced.length,
+    moved: synced.filter((entry) => entry.moved_to).length,
+    failed: synced.filter((entry) => entry.error).length,
+    results: synced,
+  });
 });

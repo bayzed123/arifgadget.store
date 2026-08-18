@@ -1,13 +1,21 @@
 #!/usr/bin/env node
 /**
- * Makes sure the deployed Worker has a JWT_SECRET.
+ * Puts the Worker's secrets in place: a JWT signing key, and the Steadfast
+ * courier credentials.
  *
- * If the repository provides one it is written through; otherwise a strong
- * random value is generated on the first deploy and then left alone forever
- * after — rotating it on every run would sign every admin out each deploy.
+ * JWT_SECRET is written through when the repository provides one; otherwise a
+ * strong random value is generated on the first deploy and then left alone
+ * forever after — rotating it on every run would sign every admin out each
+ * deploy.
+ *
+ * The courier keys are only ever written when the repository supplies them.
+ * Writing an empty string instead would be worse than leaving them unset: the
+ * Worker would believe it was configured and every courier call would fail
+ * against the portal, rather than the dashboard simply saying "not connected".
  *
  * Run after `wrangler deploy` (the script has to exist first). Worker secrets
- * take effect immediately, so no redeploy is needed.
+ * take effect immediately, so no redeploy is needed. No secret value is ever
+ * printed — only its name and what happened to it.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -34,4 +42,21 @@ if (process.env.JWT_SECRET) {
 } else {
   await put('JWT_SECRET', randomBytes(48).toString('base64url'));
   console.log('JWT_SECRET generated and stored on the Worker (first deploy).');
+}
+
+/**
+ * Steadfast courier credentials. Absent is a valid, working state — the
+ * courier panel reports itself as not connected and the rest of the shop is
+ * unaffected — so a missing key is reported, never invented.
+ */
+for (const name of ['STEADFAST_API_KEY', 'STEADFAST_SECRET_KEY']) {
+  const value = process.env[name]?.trim();
+  if (value) {
+    await put(name, value);
+    console.log(`${name} set from the repository secret.`);
+  } else if (names.has(name)) {
+    console.log(`${name} already present on the Worker — left unchanged.`);
+  } else {
+    console.log(`${name} not provided — Steadfast stays disconnected until it is.`);
+  }
 }

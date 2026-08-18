@@ -131,6 +131,13 @@ export interface AdminOrder {
   payment_method: string;
   created_at: number;
   units: number;
+  /** Courier fields. Empty until the order is booked with Steadfast. */
+  courier?: string;
+  consignment_id?: string;
+  tracking_code?: string;
+  courier_status?: string;
+  courier_cod_amount?: number;
+  courier_synced_at?: number | null;
 }
 
 export interface OrderItem {

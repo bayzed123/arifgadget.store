@@ -1,6 +1,15 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
-import { dateTime, money, number, orderStatus, ORDER_STATUS_TONE, percent } from '../../lib/format';
+import {
+  COURIER_TONE,
+  courierStatus,
+  dateTime,
+  money,
+  number,
+  orderStatus,
+  ORDER_STATUS_TONE,
+  percent,
+} from '../../lib/format';
 import { useToast } from '../../lib/store';
 import type { AdminOrder, OrderItem } from '../../lib/types';
 import { Empty, Spinner } from '../../components/ui';
@@ -43,6 +52,10 @@ export function Orders() {
   const [items, setItems] = useState<OrderItem[]>([]);
   const [saving, setSaving] = useState<number | null>(null);
 
+  /** Courier connection state, so staff see "not connected" instead of failures. */
+  const [courier, setCourier] = useState<{ connected: boolean; message: string } | null>(null);
+  const [courierBusy, setCourierBusy] = useState<number | 'all' | null>(null);
+
   const load = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams({ status, page: String(page), limit: '40' });
@@ -61,6 +74,67 @@ export function Orders() {
     const timer = setTimeout(load, q ? 260 : 0);
     return () => clearTimeout(timer);
   }, [load, q]);
+
+  // Asked once per visit. Reads the courier account balance, which proves both
+  // keys without booking anything, so it costs the shop nothing.
+  useEffect(() => {
+    api<{ connected: boolean; message: string }>('/api/admin/courier', { auth: true })
+      .then(setCourier)
+      .catch(() => setCourier({ connected: false, message: 'Could not reach the courier.' }));
+  }, []);
+
+  /** Hands one parcel to Steadfast. Real money, so always confirmed first. */
+  async function book(order: AdminOrder) {
+    const cod = order.payment_method === 'cod' ? order.total : 0;
+    const line = cod > 0 ? `collect ${money(cod)} on delivery` : 'collect nothing — this order is already paid';
+    if (!confirm(`Send ${order.order_no} to Steadfast and ${line}?`)) return;
+
+    setCourierBusy(order.id);
+    try {
+      const res = await api<{ tracking_code: string; consignment_id: string }>(
+        `/api/admin/orders/${order.id}/courier`,
+        { method: 'POST', auth: true },
+      );
+      toast(`${order.order_no} booked — tracking ${res.tracking_code || res.consignment_id}`, 'success');
+      load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Steadfast would not accept this order', 'error');
+    } finally {
+      setCourierBusy(null);
+    }
+  }
+
+  /** Refreshes one parcel, or every parcel still in flight. */
+  async function refresh(order?: AdminOrder) {
+    setCourierBusy(order ? order.id : 'all');
+    try {
+      if (order) {
+        const res = await api<{ courier_status_label: string; moved_to?: string }>(
+          `/api/admin/orders/${order.id}/courier/sync`,
+          { method: 'POST', auth: true },
+        );
+        toast(
+          `${order.order_no}: ${res.courier_status_label}${res.moved_to ? ` — moved to ${orderStatus(res.moved_to)}` : ''}`,
+          'success',
+        );
+      } else {
+        const res = await api<{ checked: number; moved: number; failed: number }>('/api/admin/courier/sync', {
+          method: 'POST',
+          auth: true,
+        });
+        toast(
+          `Checked ${res.checked} parcel${res.checked === 1 ? '' : 's'} · ${res.moved} moved` +
+            (res.failed ? ` · ${res.failed} could not be read` : ''),
+          res.failed ? 'error' : 'success',
+        );
+      }
+      load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not reach Steadfast', 'error');
+    } finally {
+      setCourierBusy(null);
+    }
+  }
 
   async function openOrder(order: AdminOrder) {
     if (openId === order.id) {
@@ -110,6 +184,18 @@ export function Orders() {
             {data ? `${number(data.total)} orders` : 'Loading…'} · cancelling or refunding restocks automatically
           </p>
         </div>
+        {courier && (
+          <div className="row gap-8 wrap-row" style={{ alignItems: 'center' }}>
+            <span className={`badge ${courier.connected ? 'ok' : 'low'}`} title={courier.message}>
+              <span className="dot" /> Steadfast {courier.connected ? 'connected' : 'not connected'}
+            </span>
+            {courier.connected && (
+              <button className="btn ghost sm" disabled={courierBusy !== null} onClick={() => refresh()}>
+                {courierBusy === 'all' ? 'Checking…' : 'Refresh courier'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="filter-bar">
@@ -160,6 +246,7 @@ export function Orders() {
                     <th className="num">Total</th>
                     <th className="num">Profit</th>
                     <th>Status</th>
+                    <th>Courier</th>
                     <th />
                   </tr>
                 </thead>
@@ -203,7 +290,40 @@ export function Orders() {
                           </span>
                         </td>
                         <td>
+                          {order.consignment_id ? (
+                            <>
+                              <span className={`badge ${COURIER_TONE[order.courier_status ?? ''] ?? 'info'}`}>
+                                <span className="dot" /> {courierStatus(order.courier_status ?? 'pending')}
+                              </span>
+                              <div className="tiny dim mono">{order.tracking_code || order.consignment_id}</div>
+                              {(order.courier_cod_amount ?? 0) > 0 && (
+                                <div className="tiny dim">COD {money(order.courier_cod_amount ?? 0)}</div>
+                              )}
+                            </>
+                          ) : (
+                            <span className="tiny dim">Not sent</span>
+                          )}
+                        </td>
+                        <td>
                           <div className="row gap-4 wrap-row">
+                            {courier?.connected && !order.consignment_id && !CLOSED.includes(order.status) && (
+                              <button
+                                className="btn ghost sm"
+                                disabled={courierBusy !== null}
+                                onClick={() => book(order)}
+                              >
+                                {courierBusy === order.id ? 'Sending…' : 'Send to Steadfast'}
+                              </button>
+                            )}
+                            {courier?.connected && order.consignment_id && (
+                              <button
+                                className="btn ghost sm"
+                                disabled={courierBusy !== null}
+                                onClick={() => refresh(order)}
+                              >
+                                {courierBusy === order.id ? 'Checking…' : 'Refresh'}
+                              </button>
+                            )}
                             {NEXT[order.status] && (
                               <button
                                 className="btn primary sm"
@@ -237,7 +357,7 @@ export function Orders() {
 
                       {openId === order.id && (
                         <tr>
-                          <td colSpan={7} style={{ background: 'var(--surface-inset)' }}>
+                          <td colSpan={8} style={{ background: 'var(--surface-inset)' }}>
                             {items.length === 0 ? (
                               <p className="small dim">Loading line items…</p>
                             ) : (

@@ -11,6 +11,19 @@ type Metric = 'money' | 'orders' | 'units';
 
 const PIPELINE_ORDER = ['pending', 'confirmed', 'shipped', 'delivered', 'refunded', 'cancelled'];
 
+/** What Steadfast reports back, summarised by the Worker. */
+interface CourierSummary {
+  booked: number;
+  delivered: number;
+  returned: number;
+  in_transit: number;
+  awaiting_approval: number;
+  success_rate: number;
+  return_rate: number;
+  cod_collected: number;
+  cod_outstanding: number;
+}
+
 export function Dashboard() {
   const [days, setDays] = useState(30);
   const [metric, setMetric] = useState<Metric>('money');
@@ -23,6 +36,13 @@ export function Dashboard() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+
+  /**
+   * Courier figures are fetched on their own rather than alongside the rest.
+   * Steadfast being unreachable, or simply not connected, must not blank out
+   * the sales dashboard.
+   */
+  const [courier, setCourier] = useState<CourierSummary | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +71,16 @@ export function Dashboard() {
       .catch((err: Error) => !cancelled && setError(err.message))
       .finally(() => !cancelled && setLoading(false));
 
+    return () => {
+      cancelled = true;
+    };
+  }, [days]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<CourierSummary>(`/api/admin/analytics/courier?days=${days}`, { auth: true })
+      .then((res) => !cancelled && setCourier(res))
+      .catch(() => !cancelled && setCourier(null));
     return () => {
       cancelled = true;
     };
@@ -181,6 +211,38 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+
+      {courier && courier.booked > 0 && (
+        <div className="panel" style={{ marginBottom: 22 }}>
+          <div className="panel-head">
+            <div>
+              <h3>Courier — Steadfast</h3>
+              <p className="tiny dim">
+                {number(courier.booked)} parcel{courier.booked === 1 ? '' : 's'} booked in the last {days} days
+                {courier.awaiting_approval > 0
+                  ? ` · ${number(courier.awaiting_approval)} awaiting courier approval`
+                  : ''}
+              </p>
+            </div>
+            <Link to="/admin/orders" className="btn ghost sm">
+              All orders
+            </Link>
+          </div>
+          <div className="panel-body">
+            <div className="stat-row">
+              <Stat label="Delivered" value={number(courier.delivered)} foot={`${percent(courier.success_rate)} success`} />
+              <Stat label="Returned" value={number(courier.returned)} foot={`${percent(courier.return_rate)} of settled`} />
+              <Stat label="Still moving" value={number(courier.in_transit)} foot="With the courier now" />
+              <Stat label="COD collected" value={money(courier.cod_collected)} foot="Cash the courier owes you" />
+              <Stat label="COD outstanding" value={money(courier.cod_outstanding)} foot="Not delivered yet" />
+            </div>
+            <p className="tiny dim" style={{ marginTop: 10 }}>
+              Success and return rates count only parcels the courier has finished with, so today's deliveries still on
+              the road do not drag the figure down.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="chart-grid split">
         <div className="panel">

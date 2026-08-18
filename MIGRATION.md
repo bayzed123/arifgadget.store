@@ -116,6 +116,26 @@ account's name cannot be reused while that account still holds it.
 5. Check the shop: place a test order, track it by phone number, open the
    invoice, sign in to the dashboard.
 
+## Steadfast courier
+
+Two repository secrets connect the shop to the courier:
+
+| Secret | |
+|---|---|
+| `STEADFAST_API_KEY` | Api-Key from the Steadfast portal |
+| `STEADFAST_SECRET_KEY` | Secret-Key from the same page |
+
+The deploy writes both onto the Worker. Leaving them unset is a supported
+state: the dashboard shows "Steadfast not connected", the send-to-courier
+buttons stay hidden, and every other part of the shop is unaffected. They are
+never written as empty strings, because a Worker that believes it is configured
+fails every courier call instead of saying it is not connected.
+
+Both keys authorise real bookings and control COD collection, so treat them
+like a bank credential: rotate them in the Steadfast portal if they are ever
+pasted into a chat, an email or a ticket, and put the replacement straight into
+the GitHub secret.
+
 ## The dashboard owner
 
 There is deliberately no admin account in the database yet. The password
