@@ -59,21 +59,24 @@ await probe('D1 databases listable', 'D1: Read (or Edit)', async () => {
   return match ? `${D1_NAME} → ${match.uuid}` : `no database named ${D1_NAME} yet`;
 });
 
-// The one that broke the deploy. `wrangler d1 migrations apply` runs every
-// statement through this endpoint, and Cloudflare classes it as a write even
-// for a SELECT — a read-only token gets 7500 here and the deploy stops.
-await probe('D1 queries allowed', 'D1: Edit', async () => {
+// The one that broke the deploy: migrations are writes, and a read-only token
+// is refused with 7500 the moment one runs.
+//
+// It has to be probed with an actual write. D1 happily runs a SELECT through
+// the same endpoint for a read-only token, so probing with one reports a false
+// green and the deploy dies a step later instead.
+await probe('D1 writes allowed', 'D1: Edit', async () => {
   if (!databaseId) throw new Error('skipped — no database resolved above');
-  const res = await cf.call(`/d1/database/${databaseId}/query`, {
+  await cf.call(`/d1/database/${databaseId}/query`, {
     method: 'POST',
-    body: { sql: 'SELECT 1 AS ok' },
+    body: { sql: 'CREATE TABLE IF NOT EXISTS _cf_write_probe (n INTEGER); DROP TABLE IF EXISTS _cf_write_probe;' },
   });
   const tables = await cf.call(`/d1/database/${databaseId}/query`, {
     method: 'POST',
     body: { sql: "SELECT count(*) AS n FROM sqlite_master WHERE type = 'table'" },
   });
   const n = tables?.[0]?.results?.[0]?.n ?? '?';
-  return res ? `ok — database currently holds ${n} table(s)` : 'ok';
+  return `write accepted — database holds ${n} table(s)`;
 });
 
 /* ── KV ──────────────────────────────────────────────────────────────── */

@@ -15,9 +15,9 @@ then.
 
 | Resource | Name | Status |
 |---|---|---|
-| D1 database | `arif-gadgets` | `3c619937-10e9-43ec-9e9f-c0fd0c1da71c` — **built: all 12 migrations applied and verified** |
+| D1 database | `arif-gadgets` | `3c619937-10e9-43ec-9e9f-c0fd0c1da71c` — **built: all 13 migrations applied and verified** |
 | KV namespace | `arif-gadgets-cache` | `a7c032dadfd54f89afd5b01134ec8973` — created |
-| R2 bucket | `arif-gadgets-media` | not created — R2 is not switched on for this account |
+| R2 bucket | `arif-gadgets-media` | created — R2 is enabled, so dashboard image upload works |
 | Worker | `arif-gadgets-api` | not deployed yet |
 | workers.dev subdomain | — | **not registered** |
 
@@ -61,10 +61,10 @@ removed, leaving the counts above unchanged:
   removed the revenue from the daily view again
 - the ledger recorded exactly one `sale` and one `return`
 
-**R2** stays optional. Without it, image *upload* in the dashboard returns a
-clear "storage is not enabled" message and pasting an image URL works as
-normal — the same behaviour as the previous account. Enabling R2 in the
-Cloudflare dashboard turns upload on at the next deploy, with no code change.
+**R2** is now switched on and the bucket exists, so uploading a product photo
+in the dashboard works from the first deploy. (The code still degrades
+gracefully if R2 is ever turned off: upload reports "storage is not enabled"
+and pasting an image URL keeps working.)
 
 ## Two things block the deploy
 

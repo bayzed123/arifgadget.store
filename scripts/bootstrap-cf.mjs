@@ -26,15 +26,24 @@ const WORKER_NAME = process.env.WORKER_NAME ?? 'arif-gadgets-api';
 const cf = client();
 
 /**
- * Listing D1 databases needs only read access; running a statement against one
- * needs D1: Edit. A token holding just the first sails through provisioning and
- * then dies in `wrangler d1 migrations apply` with "You do not have permission
- * to perform this operation. [code: 7500]", which names neither the permission
- * nor where to grant it. One harmless SELECT here turns that into an answer.
+ * Listing D1 databases needs only read access; changing one needs D1: Edit. A
+ * token holding just the first sails through provisioning and then dies in
+ * `wrangler d1 migrations apply` with "You do not have permission to perform
+ * this operation. [code: 7500]", which names neither the permission nor where
+ * to grant it.
+ *
+ * The probe has to be a *write*. A read-only token is perfectly happy to run
+ * `SELECT 1` through the same endpoint, so a SELECT here reports a false green
+ * and the deploy still dies one step later — which is exactly what this check
+ * did on its first outing. A scratch table created and immediately dropped is
+ * the smallest thing D1 will refuse without the edit permission.
  */
 async function assertD1Writable(databaseId) {
   try {
-    await cf.call(`/d1/database/${databaseId}/query`, { method: 'POST', body: { sql: 'SELECT 1' } });
+    await cf.call(`/d1/database/${databaseId}/query`, {
+      method: 'POST',
+      body: { sql: 'CREATE TABLE IF NOT EXISTS _cf_write_probe (n INTEGER); DROP TABLE IF EXISTS _cf_write_probe;' },
+    });
   } catch (err) {
     const denied = (err.errors ?? []).some((e) => e.code === 7500 || e.code === 10000);
     if (!denied) throw err;
