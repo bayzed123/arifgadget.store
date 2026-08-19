@@ -82,12 +82,20 @@ export function Login() {
 
             <div className="field">
               <label htmlFor="luser">Username</label>
+              {/*
+                No placeholder. This field used to suggest the shop's real
+                sign-in name, which put half of a working credential on a page
+                anyone can open — an attacker was left guessing only the
+                password. The label is enough to say what belongs here.
+
+                `autoComplete` stays on so a staff member's own saved password
+                still fills in; that is their browser's copy, not ours.
+              */}
               <input
                 id="luser"
                 className="input"
                 required
                 maxLength={60}
-                placeholder="arifgadget"
                 value={username}
                 onChange={(e) => setUsername(e.target.value.trim())}
                 autoComplete="username"

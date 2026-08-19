@@ -4,6 +4,7 @@ import { api, ApiError } from '../lib/api';
 import { dateTime, money, number, orderStatus } from '../lib/format';
 import type { StoreSettings } from '../lib/types';
 import { Spinner } from '../components/ui';
+import { Logo } from '../components/Logo';
 
 interface InvoiceOrder {
   order_no: string;
@@ -30,6 +31,8 @@ interface InvoiceItem {
   qty: number;
   unit_price: number;
   line_total: number;
+  /** Which colour was ordered, for products stocked in several. */
+  colour?: string;
 }
 
 /**
@@ -97,13 +100,29 @@ export function Invoice() {
       <article className="invoice">
         <header className="invoice-head">
           <div>
-            <h1>{settings?.store_name ?? 'Arif Gadgets'}</h1>
+            <div className="invoice-brand" aria-hidden="true">
+              <Logo />
+            </div>
+            {/*
+              The registered name, not the short brand on the logo. A receipt is
+              a document someone may present for a warranty claim or an expense
+              return, so it states who the shop legally is.
+            */}
+            <h1>{settings?.legal_name || settings?.store_name || 'ARIF GADGET STORE'}</h1>
             {settings?.store_address && <p className="small">{settings.store_address}</p>}
             <p className="small">
               {settings?.support_phone}
               {settings?.support_phone_2 ? ` · ${settings.support_phone_2}` : ''}
             </p>
             {settings?.support_email && <p className="small">{settings.support_email}</p>}
+            {settings?.support_whatsapp_url && (
+              <p className="small">
+                WhatsApp:{' '}
+                <a href={settings.support_whatsapp_url} target="_blank" rel="noopener noreferrer">
+                  {settings.support_whatsapp_url.replace('https://wa.me/', '+')}
+                </a>
+              </p>
+            )}
           </div>
           <div className="right">
             <div className="eyebrow">Invoice</div>
@@ -142,7 +161,12 @@ export function Invoice() {
             <tr>
               <th>Item</th>
               <th className="num">Qty</th>
-              <th className="num">Unit</th>
+              {/*
+                This column was headed "Unit" while showing money, so it read as
+                a second, contradictory price next to Amount. It is the price of
+                one piece — the header now says so.
+              */}
+              <th className="num">Unit price</th>
               <th className="num">Amount</th>
             </tr>
           </thead>
@@ -151,9 +175,14 @@ export function Invoice() {
               <tr key={item.sku}>
                 <td>
                   {item.name}
-                  <div className="tiny dim">SKU {item.sku}</div>
+                  <div className="tiny dim">
+                    SKU {item.sku}
+                    {item.colour ? ` · Colour: ${item.colour}` : ''}
+                  </div>
                 </td>
-                <td className="num">{number(item.qty)}</td>
+                <td className="num">
+                  {number(item.qty)} <span className="tiny dim">pcs</span>
+                </td>
                 <td className="num">{money(item.unit_price)}</td>
                 <td className="num">{money(item.line_total)}</td>
               </tr>
