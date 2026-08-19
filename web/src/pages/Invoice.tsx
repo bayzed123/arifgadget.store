@@ -8,6 +8,7 @@ import { Logo } from '../components/Logo';
 
 interface InvoiceOrder {
   order_no: string;
+  invoice_no?: string;
   customer_name: string;
   customer_phone: string;
   address: string;
@@ -125,8 +126,16 @@ export function Invoice() {
             )}
           </div>
           <div className="right">
-            <div className="eyebrow">Invoice</div>
-            <div className="mono invoice-no">{order.order_no}</div>
+            {/*
+              Two identifiers, each labelled. This block used to head "Invoice"
+              with the order number, so one string was doing both jobs and there
+              was no invoice reference to quote or search on.
+            */}
+            <div className="eyebrow">Invoice no.</div>
+            <div className="mono invoice-no">{order.invoice_no ?? order.order_no}</div>
+            <p className="small">
+              Order no. <span className="mono">{order.order_no}</span>
+            </p>
             <p className="small">{dateTime(order.created_at)}</p>
             <p className="small">
               Status: <strong>{orderStatus(order.status)}</strong>

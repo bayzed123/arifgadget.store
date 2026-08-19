@@ -120,6 +120,8 @@ export interface Quote {
 }
 
 export interface AdminOrder {
+  /** Receipt reference, distinct from order_no. Derived from the row id. */
+  invoice_no?: string;
   payment_reference?: string;
   delivery_zone?: string;
   id: number;

@@ -201,7 +201,7 @@ export function Orders() {
       <div className="filter-bar">
         <input
           className="input"
-          placeholder="Search order number, name or phone…"
+          placeholder="Search order no, invoice no, name or phone…"
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
@@ -262,6 +262,8 @@ export function Orders() {
                           >
                             {openId === order.id ? '▾' : '▸'} {order.order_no}
                           </button>
+                          {/* The number printed on the customer's receipt. */}
+                          {order.invoice_no && <div className="tiny dim mono">{order.invoice_no}</div>}
                           <div className="tiny dim">{dateTime(order.created_at)}</div>
                         </td>
                         <td>

@@ -550,8 +550,11 @@ admin.get('/orders', async (c) => {
     binds.push(status);
   }
   if (q) {
-    where.push('(order_no LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)');
-    binds.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    // Staff search by whatever the customer quotes: the order number from the
+    // confirmation, the invoice number from the printed receipt, a name, or a
+    // phone number.
+    where.push('(order_no LIKE ? OR invoice_no LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)');
+    binds.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
   const whereSql = where.join(' AND ');
 
@@ -560,7 +563,7 @@ admin.get('/orders', async (c) => {
     .first<{ n: number }>();
 
   const { results } = await c.env.DB.prepare(
-    `SELECT o.id, o.order_no, o.customer_name, o.customer_phone, o.city, o.status,
+    `SELECT o.id, o.order_no, o.invoice_no, o.customer_name, o.customer_phone, o.city, o.status,
             o.subtotal, o.discount, o.shipping, o.tax, o.total, o.cost_total, o.profit,
             o.margin_pct, o.payment_method, o.payment_reference, o.delivery_zone, o.created_at,
             o.courier, o.consignment_id, o.tracking_code, o.courier_status,

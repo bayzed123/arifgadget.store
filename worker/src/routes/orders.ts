@@ -245,7 +245,7 @@ orders.get('/orders/:orderNo', async (c) => {
   const placeholders = variants.map(() => '?').join(', ');
 
   const order = await c.env.DB.prepare(
-    `SELECT id, order_no, customer_name, customer_phone, address, city, note, status,
+    `SELECT id, order_no, invoice_no, customer_name, customer_phone, address, city, note, status,
             subtotal, discount, shipping, tax, total,
             payment_method, payment_reference, delivery_zone, created_at, updated_at,
             courier, consignment_id, tracking_code, courier_status, courier_synced_at
