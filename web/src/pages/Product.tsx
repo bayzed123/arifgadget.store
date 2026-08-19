@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Product as ProductType } from '../lib/types';
 import { money, number } from '../lib/format';
-import { ProductThumb } from '../components/ProductThumb';
+import { ProductGallery } from '../components/ProductGallery';
 import { Prose } from '../components/Prose';
 import { ProductCard } from '../components/ProductCard';
 import { Empty, Rating, Spinner, StockBadge } from '../components/ui';
@@ -80,9 +80,12 @@ export function Product() {
 
       <div className="pdp">
         <div>
-          <div className="pdp-media">
-            <ProductThumb name={product.name} imageUrl={product.image_url} category={product.category?.slug} />
-          </div>
+          <ProductGallery
+            name={product.name}
+            imageUrl={product.image_url}
+            gallery={product.gallery ?? []}
+            category={product.category?.slug}
+          />
 
           {product.description && (
             <section style={{ marginTop: 26 }}>

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { api, ApiError, uploadImage } from '../../lib/api';
+import { api, ApiError } from '../../lib/api';
 import { money, percent } from '../../lib/format';
 import { useToast } from '../../lib/store';
 import type { AdminProduct, Category, Tier } from '../../lib/types';
-import { ProductThumb } from '../../components/ProductThumb';
+import { GalleryEditor } from '../../components/GalleryEditor';
 
 /** Form state is in taka; the API speaks poisha. */
 const toPoisha = (taka: string) => Math.round((Number(taka) || 0) * 100);
@@ -29,7 +29,6 @@ const BLANK = {
   stock: '0',
   low_stock_threshold: '5',
   moq: '1',
-  image_url: '',
   tags: '',
   status: 'active',
   featured: false,
@@ -44,14 +43,18 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [specs, setSpecs] = useState<[string, string][]>([]);
   const [busy, setBusy] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+
+  // One ordered list rather than a main photo and a separate gallery: staff
+  // think in "the product's pictures", and the first one is simply the cover.
+  const [images, setImages] = useState<string[]>([]);
 
   useEffect(() => {
     if (!product) {
       setForm({ ...BLANK });
       setTiers([]);
       setSpecs([]);
+      setImages([]);
       return;
     }
     setForm({
@@ -67,7 +70,6 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
       stock: String(product.stock),
       low_stock_threshold: String(product.low_stock_threshold),
       moq: String(product.moq),
-      image_url: product.image_url,
       tags: product.tags.join(', '),
       status: product.status,
       featured: product.featured,
@@ -77,6 +79,9 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
     });
     setTiers(product.tiers);
     setSpecs(Object.entries(product.specs));
+    // The main photo leads; an empty one would otherwise make the gallery's
+    // second picture silently become the cover on the next save.
+    setImages([product.image_url, ...(product.gallery ?? [])].filter(Boolean));
   }, [product]);
 
   function set(field: keyof typeof BLANK, value: string | boolean) {
@@ -103,19 +108,6 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
 
   const marginTone = calc.margin >= 25 ? 'var(--good)' : calc.margin >= 10 ? 'var(--warn)' : 'var(--bad)';
 
-  async function handleUpload(file: File) {
-    setUploading(true);
-    try {
-      const res = await uploadImage(file);
-      set('image_url', res.url);
-      toast('Image uploaded', 'success');
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : 'Upload failed', 'error');
-    } finally {
-      setUploading(false);
-    }
-  }
-
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError('');
@@ -137,7 +129,8 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
       compare_at_price: toPoisha(form.compare_at_price),
       low_stock_threshold: Number(form.low_stock_threshold) || 0,
       moq: Math.max(Number(form.moq) || 1, 1),
-      image_url: form.image_url,
+      image_url: images[0] ?? '',
+      gallery: images.slice(1),
       tags: form.tags,
       status: form.status,
       featured: form.featured,
@@ -552,36 +545,10 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
 
               <div className="panel">
                 <div className="panel-head">
-                  <h3 style={{ fontSize: '0.95rem' }}>Image</h3>
+                  <h3 style={{ fontSize: '0.95rem' }}>Pictures</h3>
                 </div>
                 <div className="panel-body stack gap-12">
-                  <div style={{ borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--line)' }}>
-                    <ProductThumb name={form.name || 'Product'} imageUrl={form.image_url} />
-                  </div>
-                  <label className="btn ghost sm block" style={{ cursor: 'pointer' }}>
-                    {uploading ? 'Uploading…' : 'Upload image'}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      hidden
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) void handleUpload(file);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-                  <div className="field">
-                    <label htmlFor="pimg" className="tiny">
-                      or paste a URL
-                    </label>
-                    <input
-                      id="pimg"
-                      className="input"
-                      value={form.image_url}
-                      onChange={(e) => set('image_url', e.target.value)}
-                    />
-                  </div>
+                  <GalleryEditor images={images} onChange={setImages} name={form.name || 'Product'} />
                   <label className="row gap-8 small" style={{ fontWeight: 600, cursor: 'pointer' }}>
                     <input type="checkbox" checked={form.featured} onChange={(e) => set('featured', e.target.checked)} />
                     Feature on the homepage

@@ -4,6 +4,7 @@ import { useToast } from '../../lib/store';
 import { money } from '../../lib/format';
 import type { AdminProduct, Category, Post } from '../../lib/types';
 import { Spinner } from '../../components/ui';
+import { GalleryEditor } from '../../components/GalleryEditor';
 import { PREVIEW_SOURCE, isPreviewMessage, type PreviewMessage } from '../../lib/previewBridge';
 
 /**
@@ -256,6 +257,7 @@ function ProductPanel({
   const [price, setPrice] = useState((product.price / 100).toString());
   const [categoryId, setCategoryId] = useState(product.category_id ? String(product.category_id) : '');
   const [status, setStatus] = useState(product.status);
+  const [images, setImages] = useState<string[]>([]);
 
   // Reset every field when the shopper navigates to a different product.
   useEffect(() => {
@@ -265,6 +267,7 @@ function ProductPanel({
     setPrice((product.price / 100).toString());
     setCategoryId(product.category_id ? String(product.category_id) : '');
     setStatus(product.status);
+    setImages([product.image_url, ...(product.gallery ?? [])].filter(Boolean));
   }, [product]);
 
   return (
@@ -279,6 +282,11 @@ function ProductPanel({
       <div className="field">
         <label htmlFor="pv-name">Name</label>
         <input id="pv-name" className="input" value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+
+      <div className="field">
+        <label>Pictures</label>
+        <GalleryEditor images={images} onChange={setImages} name={product.name} compact />
       </div>
 
       <div className="field">
@@ -350,6 +358,8 @@ function ProductPanel({
             price: Math.round(Number(price) * 100) || 0,
             category_id: categoryId ? Number(categoryId) : null,
             status,
+            image_url: images[0] ?? '',
+            gallery: images.slice(1),
           })
         }
       >

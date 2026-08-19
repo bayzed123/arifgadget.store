@@ -135,3 +135,46 @@ export async function getSettings(env: Env): Promise<StoreSettings> {
   }>();
   return parseSettings(results ?? []);
 }
+
+/**
+ * Settings a visitor is allowed to see.
+ *
+ * An allow-list rather than the whole table, because `settings` also holds the
+ * courier keys and the payment numbers' internal notes. Both public endpoints
+ * read this one list, so a key added for the shop cannot arrive on one page
+ * and be missing on another — which is exactly how the invoice ended up with
+ * a WhatsApp line the API never sent it.
+ */
+const PUBLIC_SETTING_KEYS = [
+  'store_name',
+  'legal_name',
+  'store_tagline',
+  'support_phone',
+  'support_phone_2',
+  'support_email',
+  'support_whatsapp_url',
+  'store_address',
+  'whatsapp_number',
+  'credit_dev_name',
+  'credit_dev_url',
+  'credit_author_name',
+  'credit_author_url',
+  'owner_name',
+  'facebook_url',
+  'bkash_number',
+  'nagad_number',
+  'rocket_number',
+  'bank_details',
+  'order_whatsapp',
+] as const;
+
+export async function getPublicSettings(env: Env): Promise<StoreSettings & Record<string, string>> {
+  const { results } = await env.DB.prepare('SELECT key, value FROM settings').all<{
+    key: string;
+    value: string;
+  }>();
+  const rows = results ?? [];
+  const allowed = new Set<string>(PUBLIC_SETTING_KEYS);
+  const info = Object.fromEntries(rows.filter((r) => allowed.has(r.key)).map((r) => [r.key, r.value]));
+  return { ...parseSettings(rows), ...info } as StoreSettings & Record<string, string>;
+}
