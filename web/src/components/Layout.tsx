@@ -10,6 +10,7 @@ import { WhatsAppButton } from './WhatsAppButton';
 import { MenuDrawer } from './MenuDrawer';
 import { BottomNav } from './BottomNav';
 import { OfferPopup } from './OfferPopup';
+import { ImageZoom } from './ImageZoom';
 import { trackPageView, trackSearch } from '../lib/analytics';
 import { announceRoute, isPreviewMessage } from '../lib/previewBridge';
 
@@ -371,6 +372,8 @@ export function Layout() {
       </footer>
 
       <OfferPopup />
+      {/* Hover any picture to see it enlarged; click one to open it full screen. */}
+      <ImageZoom />
       <WhatsAppButton number={settings?.whatsapp_number} storeName={settings?.store_name} />
       <MenuDrawer open={menuOpen} categories={categories} onClose={() => setMenuOpen(false)} />
       <BottomNav onOpenCategories={() => setMenuOpen(true)} />

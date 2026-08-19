@@ -2057,3 +2057,49 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   .lightbox-nav { display: none; }
   .lightbox-figure img { max-height: 78vh; }
 }
+
+/* ============================================ hover preview */
+
+/*
+ * The panel that follows the cursor over a thumbnail. Fixed rather than
+ * absolute so it is positioned against the viewport, which is what the cursor
+ * coordinates are measured in — and so it is never clipped by a card's own
+ * overflow: hidden.
+ */
+.zoom-peek {
+  position: fixed;
+  z-index: 190;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  /* It must never eat the mouse event that is keeping it open. */
+  pointer-events: none;
+  animation: zoom-peek-in 0.12s ease-out;
+}
+.zoom-peek img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+@keyframes zoom-peek-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zoom-peek { animation: none; }
+}
+
+/*
+ * A magnifier cursor on pictures that open full screen when clicked. Pictures
+ * inside a link or a button keep the pointer they already had, because there
+ * the click still does what it always did.
+ */
+.gallery-item img,
+.press-thumb img,
+.blog-cover img,
+.thumb-sm img,
+.cart-line .media img { cursor: zoom-in; }
