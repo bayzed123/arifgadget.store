@@ -175,9 +175,14 @@ export function Layout() {
               <div style={{ color: '#fff', marginBottom: 12 }}>
                 <Logo />
               </div>
+              {/*
+                Was the same "wholesale, priced by the carton" pitch as the old
+                hero banner. This is a gadget shop people buy one phone from,
+                so the blurb leads with that and mentions bulk after.
+              */}
               <p className="small">
-                Wholesale gadgets shipped factory-direct across Bangladesh. Volume pricing, live stock and a
-                seven-day return window on every carton.
+                Genuine phones, audio, wearables and accessories, delivered across Bangladesh. Live stock, cash
+                on delivery, and a seven-day return window. Buying in quantity? The price drops automatically.
               </p>
               {settings?.owner_name && (
                 <p className="tiny dim" style={{ marginTop: 8 }}>

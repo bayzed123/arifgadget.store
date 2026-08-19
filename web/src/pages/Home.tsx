@@ -41,21 +41,13 @@ export function Home() {
         <div className="hero-banner">
           <img
             src={`${import.meta.env.BASE_URL}brand/banner.svg`}
-            alt="Arif Gadgets — wholesale gadgets priced by the carton"
+            alt="Welcome to Arif Gadget Store — genuine gadgets delivered across Bangladesh"
             width={1600}
             height={560}
           />
         </div>
 
         <aside className="hero-side">
-          <div className="promo-card">
-            <span className="eyebrow">Bulk buyers</span>
-            <p className="k">Up to 22% off</p>
-            <p className="small muted">
-              Tiered pricing kicks in automatically at checkout — the more units on the line, the lower the
-              unit price.
-            </p>
-          </div>
           <div className="promo-card">
             <span className="eyebrow">Free delivery</span>
             <p className="k">Over {money(data.settings.free_shipping_over)}</p>
@@ -64,6 +56,37 @@ export function Home() {
               {money(data.settings.shipping_outside)} anywhere else in Bangladesh.
             </p>
           </div>
+
+          {/*
+            Took the place of a "Bulk buyers — up to 22% off" card. Someone
+            landing on a shop wants to know they can reach a person, and the
+            owner's WhatsApp and email were only reachable from the footer.
+          */}
+          {(data.settings.support_whatsapp_url || data.settings.support_email) && (
+            <div className="promo-card">
+              <span className="eyebrow">Need help?</span>
+              <p className="k">We reply fast</p>
+              <p className="small muted">Ask about a product, an order or delivery — we are happy to help.</p>
+              <div className="stack gap-8" style={{ marginTop: 12 }}>
+                {data.settings.support_whatsapp_url && (
+                  <a
+                    className="btn ghost sm block"
+                    href={data.settings.support_whatsapp_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    💬 Chat on WhatsApp
+                  </a>
+                )}
+                {data.settings.support_email && (
+                  <a className="btn ghost sm block" href={`mailto:${data.settings.support_email}`}>
+                    ✉️ {data.settings.support_email}
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
           <Link to="/catalog" className="btn dark block lg">
             Browse all {data.categories.reduce((n, c) => n + (c.product_count ?? 0), 0)} products
           </Link>

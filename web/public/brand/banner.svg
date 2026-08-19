@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 560" width="1600" height="560" role="img" aria-label="Arif Gadgets — wholesale gadgets, factory direct">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 560" width="1600" height="560" role="img" aria-label="Welcome to Arif Gadget Store — genuine gadgets delivered across Bangladesh">
   <defs>
     <linearGradient id="bnBg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#0A101E"/>
@@ -102,32 +102,26 @@
 
     <!-- ===== copy ===== -->
     <g font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
-      <g transform="translate(96 108)">
-        <rect x="0" y="0" width="278" height="38" rx="19" fill="#FF7A18" fill-opacity="0.14" stroke="#FF7A18" stroke-opacity="0.45"/>
+      <g transform="translate(96 104)">
+        <rect x="0" y="0" width="330" height="38" rx="19" fill="#FF7A18" fill-opacity="0.14" stroke="#FF7A18" stroke-opacity="0.45"/>
         <circle cx="24" cy="19" r="5" fill="#22D3EE"/>
-        <text x="42" y="24.5" font-size="13.5" font-weight="700" letter-spacing="2.6" fill="#FFD75E">FACTORY DIRECT • BANGLADESH</text>
+        <text x="42" y="24.5" font-size="13.5" font-weight="700" letter-spacing="2.4" fill="#FFD75E">GADGET STORE • BANGLADESH</text>
       </g>
 
-      <text x="96" y="228" font-size="72" font-weight="800" letter-spacing="-1.5" fill="#F8FAFC">Wholesale gadgets,</text>
-      <text x="96" y="306" font-size="72" font-weight="800" letter-spacing="-1.5" fill="url(#bnGold)">priced by the carton.</text>
+      <text x="96" y="222" font-size="60" font-weight="800" letter-spacing="-1" fill="#F8FAFC">Welcome to</text>
+      <text x="96" y="304" font-size="72" font-weight="800" letter-spacing="-1.5" fill="url(#bnGold)">Arif Gadget Store</text>
 
-      <text x="96" y="356" font-size="21" font-weight="500" fill="#94A3B8">Phones · Audio · Wearables · Accessories — tiered pricing that drops as your</text>
-      <text x="96" y="386" font-size="21" font-weight="500" fill="#94A3B8">order grows. Verified stock, live inventory, ships in 48 hours.</text>
+      <text x="96" y="356" font-size="21" font-weight="500" fill="#94A3B8">Phones, audio, wearables, chargers and accessories — genuine products,</text>
+      <text x="96" y="386" font-size="21" font-weight="500" fill="#94A3B8">honest prices, and fast delivery anywhere in Bangladesh.</text>
 
       <g transform="translate(96 424)">
-        <rect x="0" y="0" width="216" height="60" rx="30" fill="url(#bnGold)"/>
-        <text x="108" y="37" font-size="19" font-weight="800" letter-spacing="0.4" fill="#0A101E" text-anchor="middle">Browse Catalogue</text>
-        <rect x="236" y="0" width="196" height="60" rx="30" fill="none" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="2"/>
-        <text x="334" y="37" font-size="19" font-weight="700" fill="#E2E8F0" text-anchor="middle">Request Quote</text>
+        <rect x="0" y="0" width="196" height="60" rx="30" fill="url(#bnGold)"/>
+        <text x="98" y="37" font-size="19" font-weight="800" letter-spacing="0.4" fill="#0A101E" text-anchor="middle">Shop Now</text>
+        <rect x="216" y="0" width="188" height="60" rx="30" fill="none" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="2"/>
+        <text x="310" y="37" font-size="19" font-weight="700" fill="#E2E8F0" text-anchor="middle">Track Order</text>
       </g>
 
-      <g fill="#64748B" font-size="14" font-weight="600" letter-spacing="1.4">
-        <text x="98" y="524">2,400+ SKUS</text>
-        <text x="248" y="524">·</text>
-        <text x="272" y="524">MOQ FROM 1 UNIT</text>
-        <text x="466" y="524">·</text>
-        <text x="490" y="524">7-DAY RETURNS</text>
-      </g>
+      <text x="98" y="524" fill="#64748B" font-size="14" font-weight="600" letter-spacing="1.4">GENUINE PRODUCTS · CASH ON DELIVERY · 7-DAY RETURNS</text>
     </g>
 
     <rect x="1" y="1" width="1598" height="558" rx="27" fill="none" stroke="#FFD75E" stroke-opacity="0.16" stroke-width="2"/>

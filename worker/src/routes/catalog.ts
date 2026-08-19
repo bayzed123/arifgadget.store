@@ -3,7 +3,7 @@ import type { Env, Variables } from '../types';
 import { notFound } from '../lib/http';
 import {
   PRODUCT_COLUMNS,
-  getSettings,
+  getPublicSettings,
   loadTiers,
   toPublicProduct,
   type ProductRow,
@@ -20,19 +20,7 @@ const SORTS: Record<string, string> = {
 
 export const catalog = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-catalog.get('/settings', async (c) => {
-  const settings = await getSettings(c.env);
-  const { results } = await c.env.DB.prepare(
-    `SELECT key, value FROM settings
-      WHERE key IN ('store_name','store_tagline','support_phone','support_phone_2',
-                    'support_email','store_address','whatsapp_number',
-                    'credit_dev_name','credit_dev_url','credit_author_name','credit_author_url',
-                    'owner_name','facebook_url',
-                    'bkash_number','nagad_number','rocket_number','bank_details','order_whatsapp')`,
-  ).all<{ key: string; value: string }>();
-  const info = Object.fromEntries((results ?? []).map((r) => [r.key, r.value]));
-  return c.json({ ...settings, ...info });
-});
+catalog.get('/settings', async (c) => c.json(await getPublicSettings(c.env)));
 
 catalog.get('/categories', async (c) => {
   const { results } = await c.env.DB.prepare(
@@ -174,6 +162,6 @@ catalog.get('/storefront', async (c) => {
     featured: map(featured),
     newest: map(newest),
     deals: map(deals),
-    settings: await getSettings(c.env),
+    settings: await getPublicSettings(c.env),
   });
 });
