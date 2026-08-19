@@ -124,6 +124,7 @@ Two repository secrets connect the shop to the courier:
 |---|---|
 | `STEADFAST_API_KEY` | Api-Key from the Steadfast portal |
 | `STEADFAST_SECRET_KEY` | Secret-Key from the same page |
+| `STEADFAST_WEBHOOK_TOKEN` | Optional. A long random string you invent — see below |
 
 The deploy writes both onto the Worker. Leaving them unset is a supported
 state: the dashboard shows "Steadfast not connected", the send-to-courier
@@ -135,6 +136,30 @@ Both keys authorise real bookings and control COD collection, so treat them
 like a bank credential: rotate them in the Steadfast portal if they are ever
 pasted into a chat, an email or a ticket, and put the replacement straight into
 the GitHub secret.
+
+### How shoppers see courier updates
+
+The tracking page shows the courier's own status next to the shop's
+checkpoints, and refreshes it from Steadfast when the stored copy is more than
+five minutes old — rate-limited through KV, so a shopper reloading the page
+cannot turn into a burst of calls on the courier's API. Settled orders are
+never refreshed; a delivered parcel has nothing left to report.
+
+That means **the webhook is optional**. Without it everything works, updates
+just arrive when someone looks rather than the instant they happen.
+
+To turn it on: invent a long random string, set it as `STEADFAST_WEBHOOK_TOKEN`,
+deploy, then give Steadfast this URL:
+
+```
+https://<your-api-host>/api/courier/steadfast/<the-token>
+```
+
+The token *is* the authentication — the route 404s on a wrong or missing one,
+so a scanner cannot even tell the endpoint exists. Treat that URL as a password
+and do not paste it anywhere public. The endpoint answers 200 even for payloads
+it cannot use, because a webhook that returns errors gets switched off at the
+sender's end.
 
 ## The dashboard owner
 

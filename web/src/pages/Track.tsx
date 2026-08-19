@@ -2,7 +2,15 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useCustomer } from '../lib/store';
-import { dateTime, DELIVERY_STAGES, money, orderStatus, ORDER_STATUS_TONE, REVERSED_STATUSES } from '../lib/format';
+import {
+  courierStatus,
+  dateTime,
+  DELIVERY_STAGES,
+  money,
+  orderStatus,
+  ORDER_STATUS_TONE,
+  REVERSED_STATUSES,
+} from '../lib/format';
 import { ProductThumb } from '../components/ProductThumb';
 
 interface TrackedOrder {
@@ -18,6 +26,11 @@ interface TrackedOrder {
   payment_method: string;
   created_at: number;
   updated_at: number;
+  /** Courier fields. Empty until the parcel is handed to Steadfast. */
+  courier?: string;
+  tracking_code?: string;
+  courier_status?: string;
+  courier_synced_at?: number | null;
 }
 
 interface TrackedItem {
@@ -170,6 +183,30 @@ export function Track() {
                   );
                 })}
               </ol>
+            )}
+
+            {/*
+              What the courier itself is reporting, shown next to the shop's own
+              checkpoints rather than instead of them. The two legitimately
+              differ for a while — a parcel the courier has delivered but not
+              yet approved is real, and hiding it would leave the shopper
+              staring at "On the way" for a parcel already in their hands.
+            */}
+            {result.order.courier_status && (
+              <div className="alert info" style={{ display: 'grid', gap: 4 }}>
+                <div className="row gap-8 wrap-row" style={{ alignItems: 'center' }}>
+                  <strong>🚚 Courier update:</strong>
+                  <span>{courierStatus(result.order.courier_status)}</span>
+                </div>
+                {result.order.tracking_code && (
+                  <span className="tiny dim">
+                    Steadfast tracking <span className="mono">{result.order.tracking_code}</span>
+                  </span>
+                )}
+                {result.order.courier_synced_at ? (
+                  <span className="tiny dim">Checked {dateTime(result.order.courier_synced_at)}</span>
+                ) : null}
+              </div>
             )}
 
             <div>

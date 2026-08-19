@@ -73,6 +73,9 @@ jobs:
           # reporting itself as not connected.
           STEADFAST_API_KEY: ${{ secrets.STEADFAST_API_KEY }}
           STEADFAST_SECRET_KEY: ${{ secrets.STEADFAST_SECRET_KEY }}
+          # Only needed for the push-based webhook. Without it the shop polls
+          # instead, which works — updates just arrive on refresh, not instantly.
+          STEADFAST_WEBHOOK_TOKEN: ${{ secrets.STEADFAST_WEBHOOK_TOKEN }}
         run: node scripts/provision-secrets.mjs
 
       - name: Provision the dashboard owner

@@ -76,24 +76,6 @@ export function Layout() {
         Skip to content
       </a>
 
-      <div className="topbar">
-        <div className="wrap">
-          <span className="row gap-8 wrap-row">
-            <span>🚚 Free delivery over ৳5,000</span>
-            <span className="dot" aria-hidden="true">
-              |
-            </span>
-            <span>📦 Ships in 48 hours</span>
-          </span>
-          <span className="row gap-12 wrap-row">
-            {settings?.support_phone && (
-              <a href={`tel:${settings.support_phone.replace(/\s|-/g, '')}`}>📞 {settings.support_phone}</a>
-            )}
-            <Link to="/track">Track order</Link>
-          </span>
-        </div>
-      </div>
-
       <header className="header">
         <div className="wrap">
           <button

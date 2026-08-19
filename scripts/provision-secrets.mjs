@@ -49,7 +49,7 @@ if (process.env.JWT_SECRET) {
  * courier panel reports itself as not connected and the rest of the shop is
  * unaffected — so a missing key is reported, never invented.
  */
-for (const name of ['STEADFAST_API_KEY', 'STEADFAST_SECRET_KEY']) {
+for (const name of ['STEADFAST_API_KEY', 'STEADFAST_SECRET_KEY', 'STEADFAST_WEBHOOK_TOKEN']) {
   const value = process.env[name]?.trim();
   if (value) {
     await put(name, value);

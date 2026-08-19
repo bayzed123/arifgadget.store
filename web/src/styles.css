@@ -258,21 +258,6 @@ h3 { font-size: 1.1rem; }
 
 /* ============================================================ header */
 
-.topbar {
-  background: var(--navy);
-  color: #cbd5e1;
-  font-size: 0.78rem;
-}
-.topbar .wrap {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 36px;
-}
-.topbar a:hover { color: var(--gold); }
-.topbar .dot { color: #3b4a63; }
-
 .header {
   position: sticky;
   top: 0;
@@ -1714,7 +1699,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 }
 
 @media print {
-  .topbar, .header, .catnav, .footer, .bottom-nav, .wa-fab,
+  .header, .catnav, .footer, .bottom-nav, .wa-fab,
   .invoice-actions, .offer-backdrop, .drawer-root { display: none !important; }
   body { background: #fff; }
   .page { padding: 0; }
