@@ -1711,3 +1711,38 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   }
   .invoice-table td, .invoice-table th { border-color: #ddd; }
 }
+
+/* ============================================ admin live preview */
+
+/*
+ * Shop on the left, edit panel on the right. Stacks on narrow screens so the
+ * page is still usable on the phone the owner actually carries — the frame
+ * keeps a workable height rather than collapsing to a letterbox.
+ */
+.preview-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: 16px;
+  align-items: start;
+}
+.preview-frame-panel { overflow: hidden; }
+.preview-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 220px);
+  min-height: 460px;
+  border: 0;
+  background: var(--surface);
+}
+.preview-edit-panel {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+@media (max-width: 1080px) {
+  .preview-split { grid-template-columns: 1fr; }
+  .preview-frame { height: 60vh; min-height: 380px; }
+  .preview-edit-panel { position: static; max-height: none; }
+}

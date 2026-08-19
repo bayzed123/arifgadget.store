@@ -6,6 +6,8 @@ import { Login } from './Login';
 
 const NAV = [
   { to: '/admin', end: true, icon: '📊', label: 'Dashboard' },
+  // Second in the list on purpose: it is the screen staff live in day to day.
+  { to: '/admin/preview', icon: '👁️', label: 'Live shop & edit' },
   { to: '/admin/products', icon: '📦', label: 'Products' },
   { to: '/admin/orders', icon: '🧾', label: 'Orders' },
   { to: '/admin/customers', icon: '👥', label: 'Customers' },

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api, mediaUrl } from '../lib/api';
 import { trackOfferClick } from '../lib/analytics';
+import { isFramed } from '../lib/previewBridge';
 
 interface Banner {
   id: number;
@@ -42,7 +43,13 @@ export function OfferPopup() {
   const [banner, setBanner] = useState<Banner | null>(null);
   const [visible, setVisible] = useState(false);
 
-  const quiet = QUIET_PATHS.some((path) => pathname.startsWith(path));
+  /**
+   * Also silent inside the dashboard's live preview. Staff editing the shop
+   * reload the frame after every save, and a modal that reopens each time is an
+   * obstacle rather than a promotion — the customer-facing behaviour is
+   * unchanged, because nothing frames a real visitor's browser.
+   */
+  const quiet = QUIET_PATHS.some((path) => pathname.startsWith(path)) || isFramed();
 
   useEffect(() => {
     if (quiet) return;
