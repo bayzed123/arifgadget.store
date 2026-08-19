@@ -587,6 +587,25 @@ admin.get('/orders', async (c) => {
   }
   const whereSql = where.join(' AND ');
 
+  /**
+   * An exact hit comes first, however old it is.
+   *
+   * Without this the results were newest-first, so a customer reading out
+   * invoice 186 could be answered with a newer order that merely contains
+   * "186" in its phone number — and the staff member would have no reason to
+   * doubt the top row. The order being asked about should be the one on top.
+   *
+   * Bare digits are matched against the invoice format too, because nobody
+   * reading a receipt over the phone says "I-N-V dash zero zero zero".
+   */
+  const orderBinds: unknown[] = [];
+  let rankSql = '';
+  if (q) {
+    const asInvoice = /^\d+$/.test(q) ? `INV-${q.padStart(6, '0')}` : q;
+    rankSql = 'CASE WHEN upper(o.order_no) = upper(?) OR upper(o.invoice_no) = upper(?) THEN 0 ELSE 1 END, ';
+    orderBinds.push(q, asInvoice);
+  }
+
   const totalRow = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM orders WHERE ${whereSql}`)
     .bind(...binds)
     .first<{ n: number }>();
@@ -599,9 +618,9 @@ admin.get('/orders', async (c) => {
             o.courier_cod_amount, o.courier_synced_at,
             (SELECT COALESCE(SUM(qty),0) FROM order_items WHERE order_id = o.id) AS units
        FROM orders o WHERE ${whereSql}
-      ORDER BY o.created_at DESC LIMIT ? OFFSET ?`,
+      ORDER BY ${rankSql}o.created_at DESC LIMIT ? OFFSET ?`,
   )
-    .bind(...binds, limit, (page - 1) * limit)
+    .bind(...binds, ...orderBinds, limit, (page - 1) * limit)
     .all();
 
   const total = totalRow?.n ?? 0;

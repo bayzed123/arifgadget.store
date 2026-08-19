@@ -11,7 +11,7 @@ import {
   percent,
 } from '../../lib/format';
 import { useToast } from '../../lib/store';
-import type { AdminOrder, CourierConnection, OrderItem } from '../../lib/types';
+import type { AdminOrder, CourierConnection, OrderDetail, OrderItem } from '../../lib/types';
 import { Empty, Spinner } from '../../components/ui';
 import { CourierBanner } from '../../components/CourierBanner';
 
@@ -51,6 +51,8 @@ export function Orders() {
 
   const [openId, setOpenId] = useState<number | null>(null);
   const [items, setItems] = useState<OrderItem[]>([]);
+  /** The open order's delivery details, which the list response does not carry. */
+  const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [saving, setSaving] = useState<number | null>(null);
 
   /** Courier connection state, so staff see why it is not working, not just that. */
@@ -159,11 +161,18 @@ export function Orders() {
     }
     setOpenId(order.id);
     setItems([]);
+    setDetail(null);
     try {
-      const res = await api<{ items: OrderItem[] }>(`/api/admin/orders/${order.id}`, { auth: true });
+      // This endpoint already returned the whole order; only the line items
+      // were being kept, which is why the address never reached the screen.
+      const res = await api<{ order: OrderDetail; items: OrderItem[] }>(`/api/admin/orders/${order.id}`, {
+        auth: true,
+      });
       setItems(res.items);
+      setDetail(res.order);
     } catch {
       setItems([]);
+      setDetail(null);
     }
   }
 
@@ -376,9 +385,11 @@ export function Orders() {
                         <tr>
                           <td colSpan={8} style={{ background: 'var(--surface-inset)' }}>
                             {items.length === 0 ? (
-                              <p className="small dim">Loading line items…</p>
+                              <p className="small dim">Loading order details…</p>
                             ) : (
                               <div className="row gap-32 wrap-row" style={{ alignItems: 'flex-start' }}>
+                                <DeliveryCard order={detail ?? order} />
+
                                 <table className="data" style={{ flex: 1, minWidth: 320, background: 'var(--surface)' }}>
                                   <thead>
                                     <tr>
@@ -459,5 +470,141 @@ export function Orders() {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Who to deliver to, and where.
+ *
+ * The dashboard used to show a name and a list of products, which is enough to
+ * pack a box and not enough to send it anywhere. Everything a person needs to
+ * hand the parcel over — or to phone the customer when the address is unclear —
+ * belongs in one block they can read in one go, and copy in one press.
+ */
+function DeliveryCard({ order }: { order: AdminOrder | OrderDetail }) {
+  const toast = useToast();
+  const full = order as Partial<OrderDetail>;
+  const phone = order.customer_phone?.trim();
+  const address = full.address?.trim() ?? '';
+  const city = order.city?.trim() ?? '';
+
+  /** One block, in the order a courier form asks for it. */
+  const forCourier = [
+    order.customer_name,
+    phone,
+    [address, city].filter(Boolean).join(', '),
+    full.note?.trim() ? `Note: ${full.note.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(forCourier);
+      toast('Delivery details copied', 'success');
+    } catch {
+      toast('Could not copy — select the text and copy it by hand', 'error');
+    }
+  }
+
+  return (
+    <div className="delivery-card">
+      <div className="between" style={{ marginBottom: 10 }}>
+        <span className="eyebrow">Deliver to</span>
+        <button type="button" className="btn ghost sm" onClick={copy}>
+          Copy
+        </button>
+      </div>
+
+      <p className="delivery-name">{order.customer_name}</p>
+
+      {phone ? (
+        <p className="delivery-line">
+          <span aria-hidden="true">📞</span>{' '}
+          <a href={`tel:${phone.replace(/\s|-/g, '')}`} className="mono">
+            {phone}
+          </a>
+        </p>
+      ) : (
+        <p className="delivery-line missing">No phone number on this order</p>
+      )}
+
+      {address || city ? (
+        <p className="delivery-line">
+          <span aria-hidden="true">📍</span>{' '}
+          <span>
+            {address}
+            {address && city ? ', ' : ''}
+            {city}
+          </span>
+        </p>
+      ) : (
+        // Worth saying out loud: this order cannot be booked with the courier
+        // until someone phones the customer for an address.
+        <p className="delivery-line missing">
+          No address on this order — call the customer before booking the courier.
+        </p>
+      )}
+
+      {order.delivery_zone && (
+        <p className="delivery-line dim tiny">
+          Zone: {order.delivery_zone === 'dhaka' ? 'Inside Dhaka' : 'Outside Dhaka'} · delivery{' '}
+          {money(order.shipping)}
+        </p>
+      )}
+
+      {full.customer_email?.trim() && (
+        <p className="delivery-line">
+          <span aria-hidden="true">✉️</span>{' '}
+          <a href={`mailto:${full.customer_email.trim()}`}>{full.customer_email.trim()}</a>
+        </p>
+      )}
+
+      {full.note?.trim() && (
+        <div className="delivery-note">
+          <span className="tiny dim">Customer's note</span>
+          <p className="small">{full.note.trim()}</p>
+        </div>
+      )}
+
+      <div className="delivery-pay">
+        <div className="between small">
+          <span className="muted">Payment</span>
+          <strong>{order.payment_method === 'cod' ? 'Cash on delivery' : order.payment_method.toUpperCase()}</strong>
+        </div>
+        {order.payment_method === 'cod' ? (
+          <div className="between small">
+            <span className="muted">Collect on delivery</span>
+            <strong className="num">{money(order.total)}</strong>
+          </div>
+        ) : (
+          <>
+            <div className="between small">
+              <span className="muted">Collect on delivery</span>
+              <strong className="num">Nothing — already paid</strong>
+            </div>
+            {order.payment_reference && (
+              <div className="between small">
+                <span className="muted">Reference</span>
+                <span className="mono tiny">{order.payment_reference}</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {order.tracking_code && (
+        <div className="delivery-pay">
+          <div className="between small">
+            <span className="muted">Courier</span>
+            <strong>{order.courier || 'Steadfast'}</strong>
+          </div>
+          <div className="between small">
+            <span className="muted">Tracking</span>
+            <span className="mono tiny">{order.tracking_code}</span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
