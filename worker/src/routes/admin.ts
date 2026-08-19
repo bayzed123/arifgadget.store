@@ -16,7 +16,14 @@ import {
 } from '../lib/http';
 import { hashPassword, randomSalt, signToken, verifyPassword, verifyToken } from '../lib/auth';
 import { PRODUCT_COLUMNS, loadTiers, toAdminProduct, type ProductRow } from '../lib/catalog';
-import { codAmountFor, courierBalance, courierConfigured, courierLabel, createConsignment } from '../lib/steadfast';
+import {
+  codAmountFor,
+  courierBalance,
+  courierConfigured,
+  courierLabel,
+  createConsignment,
+  credentialShape,
+} from '../lib/steadfast';
 import { ORDER_STATUSES, STATUS_ALIASES, NEXT_STATUSES, label } from '../lib/checkpoints';
 import {
   applyCourierCheckpoint,
@@ -875,21 +882,67 @@ admin.get('/audit', async (c) => {
  * are right without booking anything, so staff can press it as often as they
  * like. Never returns the keys themselves.
  */
+/**
+ * Is the courier connected, and if not, why?
+ *
+ * The "why" is the whole point. This used to answer with a bare boolean and a
+ * sentence, which left "the keys were never set" and "Steadfast rejected the
+ * keys we sent" looking identical from the dashboard — and those two need
+ * completely different fixes. It now reports which keys the Worker holds (never
+ * their values), what the courier actually said, and what to do about it.
+ */
 admin.get('/courier', async (c) => {
+  const shape = credentialShape(c.env);
+
   if (!courierConfigured(c.env)) {
+    const missing = [
+      shape.api_key_present ? null : 'STEADFAST_API_KEY',
+      shape.secret_key_present ? null : 'STEADFAST_SECRET_KEY',
+    ].filter(Boolean);
+
     return c.json({
       connected: false,
       balance: null,
-      message:
-        'Steadfast is not connected. The two keys are set as Worker secrets by the deploy — add STEADFAST_API_KEY and STEADFAST_SECRET_KEY to the repository secrets and deploy again.',
+      reason: 'not_configured',
+      message: `The Worker has no ${missing.join(' and ')}. Add ${missing.length > 1 ? 'them' : 'it'} to the repository secrets and run the deploy again.`,
+      fix: 'GitHub → Settings → Secrets and variables → Actions. The deploy copies them onto the Worker; nothing needs pasting into Cloudflare by hand.',
+      credentials: shape,
     });
   }
 
   const balance = await courierBalance(c.env);
+  if (balance.ok) {
+    return c.json({
+      connected: true,
+      balance: balance.data,
+      reason: 'ok',
+      message: '',
+      fix: '',
+      credentials: shape,
+    });
+  }
+
+  // Both keys are present and Steadfast still said no. Name the likely cause
+  // rather than making the owner guess between four very different problems.
+  const status = balance.status;
+  const reason =
+    status === 401 || status === 403 ? 'rejected' : status && status >= 500 ? 'courier_down' : 'unreachable';
+
+  const fix =
+    reason === 'rejected'
+      ? 'Steadfast received the keys and refused them. Check the API key and secret key in the Steadfast merchant portal, then update STEAT_FAST_API and STEAT_FAST_SECRET_KEY in the GitHub repository secrets and re-run the Deploy workflow. If the keys are definitely right, ask Steadfast whether your account needs the calling server allow-listed.'
+      : reason === 'courier_down'
+        ? 'The keys look fine — Steadfast itself is returning an error. Try again shortly; nothing needs changing at this end.'
+        : 'Could not reach the Steadfast portal at all. This is usually temporary; if it persists, confirm the portal address with Steadfast.';
+
   return c.json({
-    connected: balance.ok,
-    balance: balance.ok ? balance.data : null,
-    message: balance.ok ? '' : balance.error,
+    connected: false,
+    balance: null,
+    reason,
+    status: status ?? null,
+    message: balance.error,
+    fix,
+    credentials: shape,
   });
 });
 

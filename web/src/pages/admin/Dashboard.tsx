@@ -2,9 +2,18 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { dayLabel, money, moneyShort, number, percent, relativeTime, orderStatus } from '../../lib/format';
-import type { CategoryStat, InventoryAlert, Overview, SeriesPoint, StockMovement, TopProduct } from '../../lib/types';
+import type {
+  CategoryStat,
+  CourierConnection,
+  InventoryAlert,
+  Overview,
+  SeriesPoint,
+  StockMovement,
+  TopProduct,
+} from '../../lib/types';
 import { BarChart, BarList, Legend, LineChart } from '../../components/charts';
 import { Empty, Spinner, Stat } from '../../components/ui';
+import { CourierBanner } from '../../components/CourierBanner';
 
 const RANGES = [7, 30, 90];
 type Metric = 'money' | 'orders' | 'units';
@@ -43,6 +52,14 @@ export function Dashboard() {
    * the sales dashboard.
    */
   const [courier, setCourier] = useState<CourierSummary | null>(null);
+
+  /**
+   * Whether the courier is connected at all, which is a different question from
+   * how many parcels it moved. The panel below used to appear only once a
+   * parcel had been booked — so a shop whose courier had never worked saw no
+   * mention of Steadfast anywhere, and no way to find out why.
+   */
+  const [connection, setConnection] = useState<CourierConnection | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +102,17 @@ export function Dashboard() {
       cancelled = true;
     };
   }, [days]);
+
+  // Asked once, not per period: the connection does not change with the range.
+  useEffect(() => {
+    let cancelled = false;
+    api<CourierConnection>('/api/admin/courier', { auth: true })
+      .then((res) => !cancelled && setConnection(res))
+      .catch(() => !cancelled && setConnection(null));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (loading && !overview) return <Spinner />;
   if (error) return <Empty icon="⚠️" title="Could not load analytics" hint={error} />;
@@ -212,16 +240,20 @@ export function Dashboard() {
         </div>
       </div>
 
-      {courier && courier.booked > 0 && (
+      {/* Always here once the API has answered — a courier that is not working
+          is exactly what the owner needs to see on the front page. */}
+      {connection && (
         <div className="panel" style={{ marginBottom: 22 }}>
           <div className="panel-head">
             <div>
               <h3>Courier — Steadfast</h3>
               <p className="tiny dim">
-                {number(courier.booked)} parcel{courier.booked === 1 ? '' : 's'} booked in the last {days} days
-                {courier.awaiting_approval > 0
-                  ? ` · ${number(courier.awaiting_approval)} awaiting courier approval`
-                  : ''}
+                {courier && courier.booked > 0
+                  ? `${number(courier.booked)} parcel${courier.booked === 1 ? '' : 's'} booked in the last ${days} days` +
+                    (courier.awaiting_approval > 0
+                      ? ` · ${number(courier.awaiting_approval)} awaiting courier approval`
+                      : '')
+                  : 'No parcels booked yet'}
               </p>
             </div>
             <Link to="/admin/orders" className="btn ghost sm">
@@ -229,17 +261,30 @@ export function Dashboard() {
             </Link>
           </div>
           <div className="panel-body">
-            <div className="stat-row">
-              <Stat label="Delivered" value={number(courier.delivered)} foot={`${percent(courier.success_rate)} success`} />
-              <Stat label="Returned" value={number(courier.returned)} foot={`${percent(courier.return_rate)} of settled`} />
-              <Stat label="Still moving" value={number(courier.in_transit)} foot="With the courier now" />
-              <Stat label="COD collected" value={money(courier.cod_collected)} foot="Cash the courier owes you" />
-              <Stat label="COD outstanding" value={money(courier.cod_outstanding)} foot="Not delivered yet" />
-            </div>
-            <p className="tiny dim" style={{ marginTop: 10 }}>
-              Success and return rates count only parcels the courier has finished with, so today's deliveries still on
-              the road do not drag the figure down.
-            </p>
+            <CourierBanner state={connection} />
+
+            {courier && courier.booked > 0 ? (
+              <>
+                <div className="stat-row" style={{ marginTop: 14 }}>
+                  <Stat label="Delivered" value={number(courier.delivered)} foot={`${percent(courier.success_rate)} success`} />
+                  <Stat label="Returned" value={number(courier.returned)} foot={`${percent(courier.return_rate)} of settled`} />
+                  <Stat label="Still moving" value={number(courier.in_transit)} foot="With the courier now" />
+                  <Stat label="COD collected" value={money(courier.cod_collected)} foot="Cash the courier owes you" />
+                  <Stat label="COD outstanding" value={money(courier.cod_outstanding)} foot="Not delivered yet" />
+                </div>
+                <p className="tiny dim" style={{ marginTop: 10 }}>
+                  Success and return rates count only parcels the courier has finished with, so today's deliveries still
+                  on the road do not drag the figure down.
+                </p>
+              </>
+            ) : (
+              connection.connected && (
+                <p className="small muted" style={{ marginTop: 12 }}>
+                  Nothing has been sent to the courier yet. Open an order and press{' '}
+                  <strong>Send to Steadfast</strong>; delivery and cash-on-delivery figures appear here afterwards.
+                </p>
+              )
+            )}
           </div>
         </div>
       )}

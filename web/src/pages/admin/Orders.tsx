@@ -11,8 +11,9 @@ import {
   percent,
 } from '../../lib/format';
 import { useToast } from '../../lib/store';
-import type { AdminOrder, OrderItem } from '../../lib/types';
+import type { AdminOrder, CourierConnection, OrderItem } from '../../lib/types';
 import { Empty, Spinner } from '../../components/ui';
+import { CourierBanner } from '../../components/CourierBanner';
 
 const STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'refunded', 'cancelled'];
 
@@ -52,8 +53,8 @@ export function Orders() {
   const [items, setItems] = useState<OrderItem[]>([]);
   const [saving, setSaving] = useState<number | null>(null);
 
-  /** Courier connection state, so staff see "not connected" instead of failures. */
-  const [courier, setCourier] = useState<{ connected: boolean; message: string } | null>(null);
+  /** Courier connection state, so staff see why it is not working, not just that. */
+  const [courier, setCourier] = useState<CourierConnection | null>(null);
   const [courierBusy, setCourierBusy] = useState<number | 'all' | null>(null);
 
   const load = useCallback(() => {
@@ -78,9 +79,24 @@ export function Orders() {
   // Asked once per visit. Reads the courier account balance, which proves both
   // keys without booking anything, so it costs the shop nothing.
   useEffect(() => {
-    api<{ connected: boolean; message: string }>('/api/admin/courier', { auth: true })
+    api<CourierConnection>('/api/admin/courier', { auth: true })
       .then(setCourier)
-      .catch(() => setCourier({ connected: false, message: 'Could not reach the courier.' }));
+      .catch(() =>
+        setCourier({
+          connected: false,
+          balance: null,
+          reason: 'unreachable',
+          message: 'The dashboard could not reach its own API to ask about the courier.',
+          fix: 'Reload the page. If it keeps happening the Worker may be down — check its /health address.',
+          credentials: {
+            api_key_present: false,
+            secret_key_present: false,
+            api_key_length: 0,
+            secret_key_length: 0,
+            base_url: '',
+          },
+        }),
+      );
   }, []);
 
   /** Hands one parcel to Steadfast. Real money, so always confirmed first. */
@@ -184,19 +200,18 @@ export function Orders() {
             {data ? `${number(data.total)} orders` : 'Loading…'} · cancelling or refunding restocks automatically
           </p>
         </div>
-        {courier && (
-          <div className="row gap-8 wrap-row" style={{ alignItems: 'center' }}>
-            <span className={`badge ${courier.connected ? 'ok' : 'low'}`} title={courier.message}>
-              <span className="dot" /> Steadfast {courier.connected ? 'connected' : 'not connected'}
-            </span>
-            {courier.connected && (
-              <button className="btn ghost sm" disabled={courierBusy !== null} onClick={() => refresh()}>
-                {courierBusy === 'all' ? 'Checking…' : 'Refresh courier'}
-              </button>
-            )}
-          </div>
-        )}
       </div>
+
+      <CourierBanner
+        state={courier}
+        action={
+          courier?.connected ? (
+            <button className="btn ghost sm" disabled={courierBusy !== null} onClick={() => refresh()}>
+              {courierBusy === 'all' ? 'Checking…' : 'Refresh courier'}
+            </button>
+          ) : null
+        }
+      />
 
       <div className="filter-bar">
         <input

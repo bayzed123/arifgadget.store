@@ -236,6 +236,18 @@ export function GalleryEditor({ images, onChange, name = 'Product', compact = fa
             ? ` — ${RECOMMENDED - images.length} more would show the product better.`
             : '. The first one is the main photo; use ‹ › to reorder.'}
       </p>
+
+      {/*
+        The size rule belongs where the pictures are chosen, not only in the
+        guide. Square is the whole of it: every picture frame in the shop is
+        1:1, so a square photo fills it with no empty strips down the sides.
+      */}
+      {!compact && (
+        <p className="tiny dim">
+          Best results: <strong>square photos, 1200 × 1200 pixels</strong>, on a plain white background, under
+          5 MB each. Other shapes are never cropped — they just leave space at the sides.
+        </p>
+      )}
     </div>
   );
 }

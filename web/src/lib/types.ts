@@ -150,6 +150,33 @@ export interface AdminOrder {
   courier_synced_at?: number | null;
 }
 
+/**
+ * What the API can tell the dashboard about the Steadfast connection.
+ *
+ * `reason` exists so the UI can say something useful. "Not connected" alone
+ * covers four different problems with four different fixes, and staring at a
+ * red badge does not tell you which one you have.
+ */
+export interface CourierConnection {
+  connected: boolean;
+  balance: number | null;
+  reason: 'ok' | 'not_configured' | 'rejected' | 'courier_down' | 'unreachable';
+  /** The courier's HTTP status, when there was one. */
+  status?: number | null;
+  /** Steadfast's own words, verbatim. */
+  message: string;
+  /** What to do about it, in plain English. */
+  fix: string;
+  credentials: {
+    api_key_present: boolean;
+    secret_key_present: boolean;
+    /** Length only — never any part of the value. */
+    api_key_length: number;
+    secret_key_length: number;
+    base_url: string;
+  };
+}
+
 export interface OrderItem {
   id: number;
   product_id: number | null;

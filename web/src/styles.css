@@ -468,7 +468,16 @@ h3 { font-size: 1.1rem; }
   background: var(--surface-inset);
   overflow: hidden;
 }
-.card-media img,
+/*
+ * `contain`, not `cover`. Cover fills the tile by cropping whatever does not
+ * fit, which on a product photo means slicing the ends off a phone or cutting
+ * the plug off a charger — the shopper is shown a picture of part of the thing
+ * they are buying. Contain shows the whole product and pads the rest.
+ *
+ * The drawn placeholder still uses cover: it is generated to fill this exact
+ * box, so there is nothing of it to crop.
+ */
+.card-media img { width: 100%; height: 100%; object-fit: contain; padding: 8px; }
 .card-media svg { width: 100%; height: 100%; object-fit: cover; }
 
 .card-body { padding: 12px 13px 14px; display: flex; flex-direction: column; gap: 7px; flex: 1; }
@@ -679,7 +688,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   background: var(--surface-inset);
   flex-shrink: 0;
 }
-.thumb-sm img, .thumb-sm svg { width: 100%; height: 100%; object-fit: cover; }
+.thumb-sm img { width: 100%; height: 100%; object-fit: contain; padding: 2px; }
+.thumb-sm svg { width: 100%; height: 100%; object-fit: cover; }
 
 /* ============================================================ admin shell */
 
@@ -907,14 +917,59 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .pdp { display: grid; grid-template-columns: 1fr; gap: 28px; }
 @media (min-width: 940px) { .pdp { grid-template-columns: minmax(0, 1fr) 400px; } }
 
+/*
+ * Square, to match the product cards. One shape everywhere means one piece of
+ * advice for whoever photographs the stock — "shoot square" — and a square
+ * photo then fills the card and this box completely, with no bars on any side.
+ * Capped and centred so it does not become a 800px monolith on a wide screen.
+ */
 .pdp-media {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--surface-inset);
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
+  max-width: 560px;
+  margin-inline: auto;
 }
-.pdp-media img, .pdp-media svg { width: 100%; height: 100%; object-fit: cover; }
+.pdp-media img { width: 100%; height: 100%; object-fit: contain; padding: 14px; }
+.pdp-media svg { width: 100%; height: 100%; object-fit: cover; }
+
+/* The frame is a real button when there is a photo behind it, so it needs the
+   browser's button styling stripped back to the box the layout expects. */
+.pdp-media.zoomable {
+  display: block;
+  padding: 0;
+  position: relative;
+  width: 100%;
+  cursor: zoom-in;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.pdp-media.zoomable:hover { border-color: var(--line-strong); }
+
+.pdp-zoom-hint {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(11, 18, 32, 0.62);
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+.pdp-media.zoomable:hover .pdp-zoom-hint,
+.pdp-media.zoomable:focus-visible .pdp-zoom-hint { opacity: 1; }
+
+/* No hover on a touch screen, so the hint would never appear — show it there. */
+@media (hover: none) {
+  .pdp-zoom-hint { opacity: 1; }
+}
 
 /* Thumbnail strip under the main photo. Scrolls sideways rather than wrapping
    into a second row, so the picture stays where the eye left it. */
@@ -922,6 +977,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   display: flex;
   gap: 8px;
   margin-top: 10px;
+  max-width: 560px;
+  margin-inline: auto;
   overflow-x: auto;
   padding-bottom: 4px;
   scrollbar-width: thin;
@@ -939,7 +996,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 }
 .pdp-thumbs button:hover { border-color: var(--line-strong); }
 .pdp-thumbs button.active { border-color: var(--brand); }
-.pdp-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pdp-thumbs img { width: 100%; height: 100%; object-fit: contain; padding: 4px; display: block; }
 
 .pdp-buy {
   background: var(--surface);
@@ -978,7 +1035,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 }
 .cart-line:last-child { border-bottom: 0; }
 .cart-line .media { width: 78px; height: 78px; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-inset); }
-.cart-line .media img, .cart-line .media svg { width: 100%; height: 100%; object-fit: cover; }
+.cart-line .media img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+.cart-line .media svg { width: 100%; height: 100%; object-fit: cover; }
 
 .summary-row { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; font-size: 0.92rem; }
 .summary-row.total {
@@ -1829,7 +1887,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   background: var(--surface-inset);
 }
 .gallery-item.is-main { border-color: var(--brand); }
-.gallery-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gallery-item img { width: 100%; height: 100%; object-fit: contain; padding: 3px; display: block; }
 
 .gallery-tag {
   position: absolute;
@@ -1885,4 +1943,117 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   text-align: center;
   color: var(--ink-3);
   overflow: hidden;
+}
+
+/* ============================================ courier connection banner */
+
+/*
+ * Sits at the top of Orders and inside the dashboard's courier panel. A failed
+ * courier stops parcels being booked at all, so it is deliberately a block with
+ * room for the reason rather than a badge with a tooltip nobody hovers.
+ */
+.courier-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.courier-banner.ok { border-left-color: var(--good); background: var(--good-soft); }
+.courier-banner.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+.courier-banner p { margin: 0; }
+
+/* ============================================ full-picture lightbox */
+
+/*
+ * Sits above everything, including the sticky header and the floating WhatsApp
+ * button, so nothing overlaps the picture the shopper asked to see.
+ */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  background: rgba(6, 11, 20, 0.92);
+  cursor: zoom-out;
+  animation: lightbox-in 0.14s ease-out;
+}
+@keyframes lightbox-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lightbox { animation: none; }
+}
+
+.lightbox-figure {
+  margin: 0;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: default;
+}
+.lightbox-figure img {
+  max-width: min(94vw, 1400px);
+  /* Room for the counter beneath without pushing it off screen. */
+  max-height: 84vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+.lightbox-figure img.ready { opacity: 1; }
+
+.lightbox-count {
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lightbox-close,
+.lightbox-nav {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  line-height: 1;
+}
+.lightbox-close:hover,
+.lightbox-nav:hover { background: rgba(255, 255, 255, 0.24); }
+
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 42px;
+  height: 42px;
+  font-size: 1.1rem;
+}
+.lightbox-nav { width: 48px; height: 64px; font-size: 2rem; }
+
+/* On a phone the arrows would crowd the picture; swipe covers it instead. */
+@media (max-width: 620px) {
+  .lightbox { padding: 12px; }
+  .lightbox-nav { display: none; }
+  .lightbox-figure img { max-height: 78vh; }
 }
