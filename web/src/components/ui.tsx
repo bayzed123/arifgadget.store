@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { percent } from '../lib/format';
 
 export function Spinner() {
@@ -94,5 +94,78 @@ export function Rating({ value, count }: { value: number; count: number }) {
         {value.toFixed(1)} ({count})
       </span>
     </span>
+  );
+}
+
+/**
+ * A confirmation the shopkeeper cannot miss.
+ *
+ * Replaces `window.confirm` for anything destructive. The native dialog is
+ * unstyled, easy to dismiss by reflex, and on some mobile browsers can be
+ * suppressed entirely — which is a poor way to guard removing a product.
+ *
+ * The cancel button holds focus rather than the destructive one, so a stray
+ * Enter or a double-tap lands on the safe choice.
+ */
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel = 'Yes, remove it',
+  cancelLabel = 'No, keep it',
+  tone = 'danger',
+  busy = false,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  message: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: 'danger' | 'primary';
+  busy?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    cancelRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="offer-backdrop"
+      role="presentation"
+      onClick={(e) => e.target === e.currentTarget && onCancel()}
+    >
+      <div className="panel" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" style={{ maxWidth: 440, width: '100%' }}>
+        <div className="panel-body stack gap-16" style={{ padding: 26 }}>
+          <div>
+            <h3 id="confirm-title" style={{ marginBottom: 6 }}>
+              {title}
+            </h3>
+            <div className="small muted">{message}</div>
+          </div>
+          <div className="row gap-8 wrap-row" style={{ justifyContent: 'flex-end' }}>
+            <button className="btn ghost" ref={cancelRef} onClick={onCancel} disabled={busy}>
+              {cancelLabel}
+            </button>
+            <button className={`btn ${tone}`} onClick={onConfirm} disabled={busy}>
+              {busy ? 'Working…' : confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

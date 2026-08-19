@@ -4,7 +4,7 @@ import { money, number, percent, relativeTime } from '../../lib/format';
 import { useToast } from '../../lib/store';
 import type { AdminProduct, Category } from '../../lib/types';
 import { ProductThumb } from '../../components/ProductThumb';
-import { Empty, Spinner } from '../../components/ui';
+import { ConfirmDialog, Empty, Spinner } from '../../components/ui';
 import { ProductEditor } from './ProductEditor';
 import { StockDialog } from './StockDialog';
 
@@ -56,14 +56,21 @@ export function Products() {
       .catch(() => setCategories([]));
   }, []);
 
+  /** The product awaiting a yes/no answer, or null when nothing is pending. */
+  const [confirming, setConfirming] = useState<AdminProduct | null>(null);
+  const [archiving, setArchiving] = useState(false);
+
   async function archive(product: AdminProduct) {
-    if (!confirm(`Archive "${product.name}"? It disappears from the storefront but stays on past orders.`)) return;
+    setArchiving(true);
     try {
       await api(`/api/admin/products/${product.id}`, { method: 'DELETE', auth: true });
       toast(`${product.name} archived`, 'success');
+      setConfirming(null);
       load();
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'Could not archive', 'error');
+    } finally {
+      setArchiving(false);
     }
   }
 
@@ -213,8 +220,12 @@ export function Products() {
                             Edit
                           </button>
                           {product.status !== 'archived' && (
-                            <button className="btn ghost sm" onClick={() => archive(product)} title="Archive">
-                              🗑
+                            <button
+                              className="btn ghost sm"
+                              onClick={() => setConfirming(product)}
+                              title="Remove this product from the shop"
+                            >
+                              🗑 Remove
                             </button>
                           )}
                         </div>
@@ -253,6 +264,26 @@ export function Products() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={confirming !== null}
+        title="Remove this product?"
+        message={
+          <>
+            <strong>{confirming?.name}</strong> will disappear from the shop straight away. Customers can no
+            longer find or buy it.
+            <br />
+            <br />
+            It stays on past orders and invoices, so your sales history and profit figures do not change — and
+            you can put it back by setting its status to Active.
+          </>
+        }
+        confirmLabel="Yes, remove it"
+        cancelLabel="No, keep it"
+        busy={archiving}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => confirming && archive(confirming)}
+      />
 
       {stockFor && (
         <StockDialog

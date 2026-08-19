@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import type { Product as ProductType } from '../lib/types';
 import { money, number } from '../lib/format';
 import { ProductThumb } from '../components/ProductThumb';
+import { Prose } from '../components/Prose';
 import { ProductCard } from '../components/ProductCard';
 import { Empty, Rating, Spinner, StockBadge } from '../components/ui';
 import { setDirectBuy, useCart } from '../lib/store';
@@ -86,7 +87,14 @@ export function Product() {
           {product.description && (
             <section style={{ marginTop: 26 }}>
               <h2 style={{ marginBottom: 10 }}>About this product</h2>
-              <p className="muted">{product.description}</p>
+              {/*
+                Was a single <p>, so a description written with blank lines and
+                bullet points collapsed into one wall of text. Prose is the same
+                renderer the policy pages use — it builds React elements rather
+                than setting innerHTML, so a stray tag typed into the dashboard
+                stays text instead of becoming markup.
+              */}
+              <Prose body={product.description} />
             </section>
           )}
 
@@ -110,7 +118,19 @@ export function Product() {
               <li>Minimum order quantity is {product.moq} unit{product.moq === 1 ? '' : 's'}.</li>
               <li>Dispatched within 48 hours of payment confirmation.</li>
               <li>Cash on delivery, bKash, Nagad and bank transfer accepted.</li>
-              <li>Seven-day return window on sealed, unopened units.</li>
+              {/*
+                Stated per product now that staff mark which lines are covered.
+                A shopper learns this before paying rather than when they try to
+                send a clearance item back.
+              */}
+              {product.returnable ? (
+                <li>Seven-day return window on sealed, unopened units.</li>
+              ) : (
+                <li>
+                  <strong>Sold as-is</strong> — this item is not covered by the return policy. Faulty units are
+                  still handled under warranty.
+                </li>
+              )}
             </ul>
           </section>
         </div>

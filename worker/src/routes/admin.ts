@@ -233,6 +233,54 @@ async function writeTiers(env: Env, productId: number, raw: unknown) {
   await env.DB.batch(statements);
 }
 
+/**
+ * Colour names as a clean JSON array.
+ *
+ * Accepts either a real array or the comma-separated string the dashboard's
+ * single text box produces, because asking a shopkeeper to type JSON would be
+ * a strange thing to do. Trimmed, de-duplicated, and capped so one paste
+ * cannot fill the column.
+ */
+/**
+ * Resolves the category for a product write.
+ *
+ * Staff can pick an existing category or simply type a new name — a shopkeeper
+ * adding the first drone should not have to visit a separate screen to invent
+ * "Drones" before they can save. A typed name that already exists is reused
+ * rather than duplicated, matched case-insensitively so "Drones" and "drones"
+ * do not become two categories.
+ *
+ * @returns the category id, or null for uncategorised.
+ */
+async function resolveCategory(env: Env, categoryId: unknown, typedName: unknown): Promise<number | null> {
+  const name = typeof typedName === 'string' ? typedName.trim() : '';
+  if (name) {
+    const slug = slugify(name);
+    const existing = await env.DB.prepare(
+      'SELECT id FROM categories WHERE slug = ? OR lower(name) = lower(?) LIMIT 1',
+    )
+      .bind(slug, name)
+      .first<{ id: number }>();
+    if (existing) return existing.id;
+
+    const created = await env.DB.prepare(
+      'INSERT INTO categories (slug, name, sort_order) VALUES (?, ?, 99) RETURNING id',
+    )
+      .bind(slug, name.slice(0, 60))
+      .first<{ id: number }>();
+    return created?.id ?? null;
+  }
+
+  if (categoryId === null || categoryId === undefined || categoryId === '') return null;
+  return Number(categoryId);
+}
+
+function parseColours(raw: unknown): string {
+  const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : [];
+  const cleaned = [...new Set(list.map((c) => String(c).trim()).filter(Boolean))].slice(0, 20);
+  return JSON.stringify(cleaned.map((c) => c.slice(0, 40)));
+}
+
 admin.post('/products', async (c) => {
   requireOwner(c);
   const body = await readJson(c);
@@ -251,15 +299,16 @@ admin.post('/products', async (c) => {
   const result = await c.env.DB.prepare(
     `INSERT INTO products (sku, slug, name, brand, category_id, summary, description,
                            cost_price, price, compare_at_price, stock, low_stock_threshold, moq,
-                           image_url, gallery, specs, tags, status, featured)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
+                           image_url, gallery, specs, tags, status, featured,
+                           colours, returnable)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
   )
     .bind(
       sku,
       slug,
       name,
       optionalString(body.brand, '', 80),
-      body.category_id ? Number(body.category_id) : null,
+      await resolveCategory(c.env, body.category_id, body.category_name),
       optionalString(body.summary, '', 300),
       optionalString(body.description, '', 5000),
       cost_price,
@@ -274,6 +323,10 @@ admin.post('/products', async (c) => {
       optionalString(body.tags, '', 300),
       ['active', 'draft', 'archived'].includes(String(body.status)) ? String(body.status) : 'active',
       body.featured ? 1 : 0,
+      parseColours(body.colours),
+      // Returnable unless staff say otherwise: most stock is, and the safer
+      // default for a shopper is the one that grants them the policy.
+      body.returnable === false ? 0 : 1,
     )
     .first<{ id: number }>();
 
@@ -327,9 +380,17 @@ admin.patch('/products/:id', async (c) => {
     sets.push('featured = ?');
     binds.push(body.featured ? 1 : 0);
   }
-  if (body.category_id !== undefined) {
+  if (body.colours !== undefined) {
+    sets.push('colours = ?');
+    binds.push(parseColours(body.colours));
+  }
+  if (body.returnable !== undefined) {
+    sets.push('returnable = ?');
+    binds.push(body.returnable ? 1 : 0);
+  }
+  if (body.category_id !== undefined || body.category_name !== undefined) {
     sets.push('category_id = ?');
-    binds.push(body.category_id === null ? null : Number(body.category_id));
+    binds.push(await resolveCategory(c.env, body.category_id, body.category_name));
   }
   if (body.slug !== undefined) {
     sets.push('slug = ?');
@@ -489,8 +550,11 @@ admin.get('/orders', async (c) => {
     binds.push(status);
   }
   if (q) {
-    where.push('(order_no LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)');
-    binds.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    // Staff search by whatever the customer quotes: the order number from the
+    // confirmation, the invoice number from the printed receipt, a name, or a
+    // phone number.
+    where.push('(order_no LIKE ? OR invoice_no LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)');
+    binds.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
   const whereSql = where.join(' AND ');
 
@@ -499,7 +563,7 @@ admin.get('/orders', async (c) => {
     .first<{ n: number }>();
 
   const { results } = await c.env.DB.prepare(
-    `SELECT o.id, o.order_no, o.customer_name, o.customer_phone, o.city, o.status,
+    `SELECT o.id, o.order_no, o.invoice_no, o.customer_name, o.customer_phone, o.city, o.status,
             o.subtotal, o.discount, o.shipping, o.tax, o.total, o.cost_total, o.profit,
             o.margin_pct, o.payment_method, o.payment_reference, o.delivery_zone, o.created_at,
             o.courier, o.consignment_id, o.tracking_code, o.courier_status,
@@ -521,7 +585,7 @@ admin.get('/orders/:id', async (c) => {
   if (!order) notFound('Order not found');
 
   const { results } = await c.env.DB.prepare(
-    `SELECT id, product_id, sku, name, image_url, qty, unit_price, unit_cost,
+    `SELECT id, product_id, sku, name, image_url, qty, unit_price, unit_cost, colour,
             line_total, line_cost, line_profit
        FROM order_items WHERE order_id = ?`,
   )
@@ -907,4 +971,70 @@ admin.post('/courier/sync', async (c) => {
     failed: synced.filter((entry) => entry.error).length,
     results: synced,
   });
+});
+
+/* ══════════════════════════ customer ratings ══════════════════════════
+ *
+ * Staff cannot write a rating — only hide one. That is the whole point of
+ * tying ratings to delivered orders: a shop that can add its own five-star
+ * reviews has ratings worth nothing, and a shop that can quietly delete the
+ * bad ones is not far behind. Hiding keeps the row, so the decision is
+ * reversible and visible in the audit log.
+ */
+
+admin.get('/reviews', async (c) => {
+  const url = new URL(c.req.url);
+  const onlyHidden = url.searchParams.get('hidden') === '1';
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 50, 1), 200);
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT r.id, r.rating, r.comment, r.customer_name, r.customer_phone, r.visible, r.created_at,
+            p.id AS product_id, p.name AS product_name, p.slug AS product_slug,
+            o.order_no
+       FROM reviews r
+       JOIN products p ON p.id = r.product_id
+       LEFT JOIN orders o ON o.id = r.order_id
+      WHERE r.visible = ?
+      ORDER BY r.created_at DESC
+      LIMIT ?`,
+  )
+    .bind(onlyHidden ? 0 : 1, limit)
+    .all();
+
+  const totals = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS total,
+            COALESCE(ROUND(AVG(CASE WHEN visible = 1 THEN rating END), 2), 0) AS average,
+            SUM(CASE WHEN visible = 0 THEN 1 ELSE 0 END) AS hidden
+       FROM reviews`,
+  ).first<{ total: number; average: number; hidden: number }>();
+
+  return c.json({ reviews: results ?? [], totals: totals ?? { total: 0, average: 0, hidden: 0 } });
+});
+
+/** Show or hide one rating. The triggers re-derive the product average either way. */
+admin.patch('/reviews/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const body = await readJson(c);
+  if (body.visible === undefined) badRequest('Provide "visible"');
+
+  const existing = await c.env.DB.prepare(
+    'SELECT r.id, r.rating, p.name FROM reviews r JOIN products p ON p.id = r.product_id WHERE r.id = ?',
+  )
+    .bind(id)
+    .first<{ id: number; rating: number; name: string }>();
+  if (!existing) notFound('Review not found');
+
+  const visible = body.visible ? 1 : 0;
+  await c.env.DB.prepare('UPDATE reviews SET visible = ? WHERE id = ?').bind(visible, id).run();
+
+  await audit(
+    c.env,
+    c.get('admin').username,
+    'review.visibility',
+    'review',
+    id,
+    `${existing.rating}★ on ${existing.name} → ${visible ? 'shown' : 'hidden'}`,
+  );
+
+  return c.json({ ok: true, visible: visible === 1 });
 });

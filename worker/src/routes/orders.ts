@@ -12,6 +12,8 @@ import { isFinal } from '../lib/checkpoints';
 interface IncomingItem {
   product_id: number;
   qty: number;
+  /** Chosen colour, for products stocked in more than one. */
+  colour?: string;
 }
 
 interface PricedProduct {
@@ -41,7 +43,8 @@ function parseItems(raw: unknown): IncomingItem[] {
     if (!Number.isInteger(qty) || qty <= 0 || qty > 100_000) badRequest('Each item needs a "qty" between 1 and 100000');
     if (seen.has(product_id)) badRequest(`Duplicate product_id ${product_id} — merge the quantities`);
     seen.add(product_id);
-    return { product_id, qty };
+    const colour = typeof item.colour === 'string' ? item.colour.trim().slice(0, 40) : '';
+    return { product_id, qty, colour };
   });
 }
 
@@ -140,6 +143,10 @@ orders.post('/orders', async (c) => {
   const delivery_zone = parseZone(body.delivery_zone);
   const { totals, byId } = await priceCart(c.env, items, delivery_zone);
 
+  // Pricing works per product, so the chosen colour travels alongside rather
+  // than through it — it affects what goes in the box, never what it costs.
+  const colourFor = new Map(items.map((item) => [item.product_id, item.colour ?? '']));
+
   const short = totals.lines.filter((line) => byId.get(line.product_id)!.stock < line.qty);
   if (short.length) {
     conflict(
@@ -185,8 +192,8 @@ orders.post('/orders', async (c) => {
     ...totals.lines.map((line) => {
       const product = byId.get(line.product_id)!;
       return c.env.DB.prepare(
-        `INSERT INTO order_items (order_id, product_id, sku, name, image_url, qty, unit_price, unit_cost)
-         SELECT id, ?, ?, ?, ?, ?, ?, ? FROM orders WHERE order_no = ?`,
+        `INSERT INTO order_items (order_id, product_id, sku, name, image_url, qty, unit_price, unit_cost, colour)
+         SELECT id, ?, ?, ?, ?, ?, ?, ?, ? FROM orders WHERE order_no = ?`,
       ).bind(
         product.id,
         product.sku,
@@ -195,6 +202,9 @@ orders.post('/orders', async (c) => {
         line.qty,
         line.unit_price,
         line.unit_cost,
+        // Recorded from what the shopper picked, so the packing slip and the
+        // invoice both say which one to put in the box.
+        colourFor.get(line.product_id) ?? '',
         orderNo,
       );
     }),
@@ -235,7 +245,7 @@ orders.get('/orders/:orderNo', async (c) => {
   const placeholders = variants.map(() => '?').join(', ');
 
   const order = await c.env.DB.prepare(
-    `SELECT id, order_no, customer_name, customer_phone, address, city, note, status,
+    `SELECT id, order_no, invoice_no, customer_name, customer_phone, address, city, note, status,
             subtotal, discount, shipping, tax, total,
             payment_method, payment_reference, delivery_zone, created_at, updated_at,
             courier, consignment_id, tracking_code, courier_status, courier_synced_at
@@ -262,7 +272,7 @@ orders.get('/orders/:orderNo', async (c) => {
   const fresh = await refreshIfStale(c.env, order);
 
   const { results } = await c.env.DB.prepare(
-    `SELECT oi.sku, oi.name, oi.image_url, oi.qty, oi.unit_price, oi.line_total
+    `SELECT oi.sku, oi.name, oi.image_url, oi.qty, oi.unit_price, oi.line_total, oi.colour
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
       WHERE o.order_no = ?`,
   )

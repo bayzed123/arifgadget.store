@@ -34,6 +34,10 @@ export interface Product {
   featured: boolean;
   rating: number;
   review_count: number;
+  /** Colour names this product is stocked in; empty when it has no variants. */
+  colours: string[];
+  /** False for clearance and sealed lines the return policy does not cover. */
+  returnable: boolean;
   units_sold: number;
   tiers: Tier[];
   min_price: number;
@@ -66,12 +70,16 @@ export interface StoreSettings {
   free_shipping_over: number;
   tax_pct: number;
   store_name?: string;
+  /** Registered name, used on invoices where the short brand is not enough. */
+  legal_name?: string;
   store_tagline?: string;
   support_phone?: string;
   support_phone_2?: string;
   support_email?: string;
   store_address?: string;
   whatsapp_number?: string;
+  /** Full https://wa.me/… link for support, so every entry point agrees. */
+  support_whatsapp_url?: string;
   credit_dev_name?: string;
   credit_dev_url?: string;
   credit_author_name?: string;
@@ -112,6 +120,8 @@ export interface Quote {
 }
 
 export interface AdminOrder {
+  /** Receipt reference, distinct from order_no. Derived from the row id. */
+  invoice_no?: string;
   payment_reference?: string;
   delivery_zone?: string;
   id: number;
@@ -152,6 +162,7 @@ export interface OrderItem {
   line_total: number;
   line_cost: number;
   line_profit: number;
+  colour?: string;
 }
 
 export interface StockMovement {
