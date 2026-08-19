@@ -2103,3 +2103,45 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .blog-cover img,
 .thumb-sm img,
 .cart-line .media img { cursor: zoom-in; }
+
+/* ============================================ order delivery details */
+
+/*
+ * Shown when a staff member opens an order. It sits first in the row, before
+ * the line items, because the question being asked is almost always "where
+ * does this go and who do I call", not "what was the margin".
+ */
+.delivery-card {
+  flex: 0 0 auto;
+  min-width: 260px;
+  max-width: 340px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.delivery-name { font-weight: 700; font-size: 1rem; margin-bottom: 6px; }
+.delivery-line { font-size: 0.87rem; line-height: 1.5; margin-bottom: 5px; }
+.delivery-line a { text-decoration: underline; text-underline-offset: 2px; }
+.delivery-line.missing { color: var(--bad); font-weight: 600; }
+
+.delivery-note {
+  margin: 10px 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 25%, transparent);
+}
+
+.delivery-pay {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 3px;
+}
+
+@media (max-width: 720px) {
+  .delivery-card { max-width: none; width: 100%; }
+}

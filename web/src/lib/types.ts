@@ -177,6 +177,20 @@ export interface CourierConnection {
   };
 }
 
+/**
+ * Everything stored about one order, as returned when a single order is opened.
+ *
+ * The delivery fields are deliberately not in the list response: a page of
+ * forty orders would then carry forty customers' addresses and phone numbers
+ * into the browser whether or not anyone looked at them. They arrive only when
+ * a staff member opens the order they are working on.
+ */
+export interface OrderDetail extends AdminOrder {
+  address: string;
+  customer_email: string;
+  note: string;
+}
+
 export interface OrderItem {
   id: number;
   product_id: number | null;
