@@ -3,6 +3,7 @@ import { useAuth, useTheme } from '../../lib/store';
 import { Logo } from '../../components/Logo';
 import { Spinner } from '../../components/ui';
 import { Login } from './Login';
+import { ImageZoom } from '../../components/ImageZoom';
 
 const NAV = [
   { to: '/admin', end: true, icon: '📊', label: 'Dashboard' },
@@ -79,6 +80,9 @@ export function AdminLayout() {
       <div className="admin-main">
         <Outlet />
       </div>
+
+      {/* Hover any picture to see it enlarged; click one to open it full screen. */}
+      <ImageZoom />
     </div>
   );
 }
