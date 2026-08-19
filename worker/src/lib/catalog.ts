@@ -28,6 +28,10 @@ export interface ProductRow {
   featured: number;
   rating: number;
   review_count: number;
+  /** JSON array of colour names the product is stocked in. */
+  colours: string;
+  /** 0 when the item is sold as-is and the return policy does not apply. */
+  returnable: number;
   created_at: number;
   updated_at: number;
   profit_per_unit: number;
@@ -43,7 +47,7 @@ export const PRODUCT_COLUMNS = `
   p.id, p.sku, p.slug, p.name, p.brand, p.category_id, p.summary, p.description,
   p.cost_price, p.price, p.compare_at_price, p.stock, p.low_stock_threshold, p.moq,
   p.units_sold, p.image_url, p.gallery, p.specs, p.tags, p.status, p.featured,
-  p.rating, p.review_count, p.created_at, p.updated_at,
+  p.rating, p.review_count, p.colours, p.returnable, p.created_at, p.updated_at,
   p.profit_per_unit, p.margin_pct, p.markup_pct, p.discount_pct,
   p.stock_value, p.retail_value, p.stock_state,
   c.slug AS category_slug, c.name AS category_name
@@ -76,6 +80,9 @@ export function toPublicProduct(row: ProductRow, tiers: PriceTier[] = []) {
     featured: row.featured === 1,
     rating: row.rating,
     review_count: row.review_count,
+    colours: parseJsonColumn<string[]>(row.colours, []),
+    // Shown on the product page so a shopper knows before buying, not after.
+    returnable: row.returnable === 1,
     units_sold: row.units_sold,
     tiers,
     /** Cheapest achievable unit price, used for "from ৳X" labels. */
