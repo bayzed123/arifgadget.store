@@ -935,6 +935,42 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .pdp-media img { width: 100%; height: 100%; object-fit: contain; padding: 14px; }
 .pdp-media svg { width: 100%; height: 100%; object-fit: cover; }
 
+/* The frame is a real button when there is a photo behind it, so it needs the
+   browser's button styling stripped back to the box the layout expects. */
+.pdp-media.zoomable {
+  display: block;
+  padding: 0;
+  position: relative;
+  width: 100%;
+  cursor: zoom-in;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.pdp-media.zoomable:hover { border-color: var(--line-strong); }
+
+.pdp-zoom-hint {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(11, 18, 32, 0.62);
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+.pdp-media.zoomable:hover .pdp-zoom-hint,
+.pdp-media.zoomable:focus-visible .pdp-zoom-hint { opacity: 1; }
+
+/* No hover on a touch screen, so the hint would never appear — show it there. */
+@media (hover: none) {
+  .pdp-zoom-hint { opacity: 1; }
+}
+
 /* Thumbnail strip under the main photo. Scrolls sideways rather than wrapping
    into a second row, so the picture stays where the eye left it. */
 .pdp-thumbs {
@@ -1932,3 +1968,92 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .courier-banner.ok { border-left-color: var(--good); background: var(--good-soft); }
 .courier-banner.bad { border-left-color: var(--bad); background: var(--bad-soft); }
 .courier-banner p { margin: 0; }
+
+/* ============================================ full-picture lightbox */
+
+/*
+ * Sits above everything, including the sticky header and the floating WhatsApp
+ * button, so nothing overlaps the picture the shopper asked to see.
+ */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  background: rgba(6, 11, 20, 0.92);
+  cursor: zoom-out;
+  animation: lightbox-in 0.14s ease-out;
+}
+@keyframes lightbox-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lightbox { animation: none; }
+}
+
+.lightbox-figure {
+  margin: 0;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: default;
+}
+.lightbox-figure img {
+  max-width: min(94vw, 1400px);
+  /* Room for the counter beneath without pushing it off screen. */
+  max-height: 84vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+.lightbox-figure img.ready { opacity: 1; }
+
+.lightbox-count {
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lightbox-close,
+.lightbox-nav {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  line-height: 1;
+}
+.lightbox-close:hover,
+.lightbox-nav:hover { background: rgba(255, 255, 255, 0.24); }
+
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 42px;
+  height: 42px;
+  font-size: 1.1rem;
+}
+.lightbox-nav { width: 48px; height: 64px; font-size: 2rem; }
+
+/* On a phone the arrows would crowd the picture; swipe covers it instead. */
+@media (max-width: 620px) {
+  .lightbox { padding: 12px; }
+  .lightbox-nav { display: none; }
+  .lightbox-figure img { max-height: 78vh; }
+}

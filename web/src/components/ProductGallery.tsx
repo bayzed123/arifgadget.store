@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { mediaUrl } from '../lib/api';
 import { ProductThumb } from './ProductThumb';
+import { Lightbox } from './Lightbox';
 
 /**
  * The product's photos on the shop side.
@@ -9,6 +10,10 @@ import { ProductThumb } from './ProductThumb';
  * dashboard set. With a single photo there is nothing to choose between, so
  * the strip stays away entirely rather than showing a lone thumbnail of the
  * picture already on screen.
+ *
+ * Tapping the big picture opens it full size. The frame here is square to match
+ * the cards, which is right for the page but small for deciding whether to buy
+ * something — so the full picture is one tap away.
  */
 
 interface Props {
@@ -24,21 +29,44 @@ export function ProductGallery({ name, imageUrl, gallery, category }: Props) {
   const [dead, setDead] = useState<string[]>([]);
   const images = [imageUrl, ...gallery].filter((url) => url && !dead.includes(url));
   const [active, setActive] = useState(0);
+  const [zoomed, setZoomed] = useState(false);
 
   // A different product means a different set; keep the big picture on the
   // cover rather than on whatever index happened to be selected before.
   useEffect(() => {
     setActive(0);
     setDead([]);
+    setZoomed(false);
   }, [imageUrl, gallery.join('|')]);
 
   const current = images[active] ?? images[0] ?? '';
+  const hasPhoto = Boolean(current);
 
   return (
     <>
-      <div className="pdp-media">
-        <ProductThumb name={name} imageUrl={current} category={category} />
-      </div>
+      {/*
+        A button only when there is a real photo to enlarge. The drawn
+        placeholder has no detail to reveal, so offering to open it would be a
+        control that does nothing.
+      */}
+      {hasPhoto ? (
+        <button
+          type="button"
+          className="pdp-media zoomable"
+          onClick={() => setZoomed(true)}
+          aria-label={`View ${name} picture full size`}
+          title="Click to see the full picture"
+        >
+          <ProductThumb name={name} imageUrl={current} category={category} />
+          <span className="pdp-zoom-hint" aria-hidden="true">
+            🔍 Click to enlarge
+          </span>
+        </button>
+      ) : (
+        <div className="pdp-media">
+          <ProductThumb name={name} imageUrl={current} category={category} />
+        </div>
+      )}
 
       {images.length > 1 && (
         <div className="pdp-thumbs" role="group" aria-label={`${name} pictures`}>
@@ -60,6 +88,16 @@ export function ProductGallery({ name, imageUrl, gallery, category }: Props) {
             </button>
           ))}
         </div>
+      )}
+
+      {zoomed && hasPhoto && (
+        <Lightbox
+          images={images}
+          index={active}
+          onIndexChange={setActive}
+          onClose={() => setZoomed(false)}
+          name={name}
+        />
       )}
     </>
   );
