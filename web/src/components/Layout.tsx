@@ -170,6 +170,40 @@ export function Layout() {
 
       <footer className="footer">
         <div className="wrap">
+          {/*
+            Moved down here from a card beside the hero banner. Help belongs at
+            the end of the page: someone who has finished reading and still has
+            a question is exactly who needs it, and it is on every page rather
+            than only the home page.
+          */}
+          {(settings?.support_whatsapp_url || settings?.support_email) && (
+            <div className="help-band">
+              <div>
+                <h4>Need help?</h4>
+                <p className="small">
+                  Ask about a product, an order or delivery — we reply fast.
+                </p>
+              </div>
+              <div className="help-actions">
+                {settings?.support_whatsapp_url && (
+                  <a
+                    className="btn primary"
+                    href={settings.support_whatsapp_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    💬 Chat on WhatsApp
+                  </a>
+                )}
+                {settings?.support_email && (
+                  <a className="btn on-dark" href={`mailto:${settings.support_email}`}>
+                    ✉️ {settings.support_email}
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="footer-grid">
             <div>
               <div style={{ color: '#fff', marginBottom: 12 }}>

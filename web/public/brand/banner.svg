@@ -102,26 +102,22 @@
 
     <!-- ===== copy ===== -->
     <g font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
-      <g transform="translate(96 104)">
+      <g transform="translate(96 134)">
         <rect x="0" y="0" width="330" height="38" rx="19" fill="#FF7A18" fill-opacity="0.14" stroke="#FF7A18" stroke-opacity="0.45"/>
         <circle cx="24" cy="19" r="5" fill="#22D3EE"/>
         <text x="42" y="24.5" font-size="13.5" font-weight="700" letter-spacing="2.4" fill="#FFD75E">GADGET STORE • BANGLADESH</text>
       </g>
 
-      <text x="96" y="222" font-size="60" font-weight="800" letter-spacing="-1" fill="#F8FAFC">Welcome to</text>
-      <text x="96" y="304" font-size="72" font-weight="800" letter-spacing="-1.5" fill="url(#bnGold)">Arif Gadget Store</text>
+      <text x="96" y="252" font-size="60" font-weight="800" letter-spacing="-1" fill="#F8FAFC">Welcome to</text>
+      <text x="96" y="334" font-size="72" font-weight="800" letter-spacing="-1.5" fill="url(#bnGold)">Arif Gadget Store</text>
 
-      <text x="96" y="356" font-size="21" font-weight="500" fill="#94A3B8">Phones, audio, wearables, chargers and accessories — genuine products,</text>
-      <text x="96" y="386" font-size="21" font-weight="500" fill="#94A3B8">honest prices, and fast delivery anywhere in Bangladesh.</text>
+      <text x="96" y="392" font-size="21" font-weight="500" fill="#94A3B8">Phones, audio, wearables, chargers and accessories — genuine products,</text>
+      <text x="96" y="422" font-size="21" font-weight="500" fill="#94A3B8">honest prices, and fast delivery anywhere in Bangladesh.</text>
 
-      <g transform="translate(96 424)">
-        <rect x="0" y="0" width="196" height="60" rx="30" fill="url(#bnGold)"/>
-        <text x="98" y="37" font-size="19" font-weight="800" letter-spacing="0.4" fill="#0A101E" text-anchor="middle">Shop Now</text>
-        <rect x="216" y="0" width="188" height="60" rx="30" fill="none" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="2"/>
-        <text x="310" y="37" font-size="19" font-weight="700" fill="#E2E8F0" text-anchor="middle">Track Order</text>
+      <g transform="translate(96 462)">
+        <rect x="0" y="0" width="8" height="26" rx="4" fill="url(#bnGold)"/>
+        <text x="24" y="19" fill="#64748B" font-size="14" font-weight="600" letter-spacing="1.4">GENUINE PRODUCTS · CASH ON DELIVERY · 7-DAY RETURNS</text>
       </g>
-
-      <text x="98" y="524" fill="#64748B" font-size="14" font-weight="600" letter-spacing="1.4">GENUINE PRODUCTS · CASH ON DELIVERY · 7-DAY RETURNS</text>
     </g>
 
     <rect x="1" y="1" width="1598" height="558" rx="27" fill="none" stroke="#FFD75E" stroke-opacity="0.16" stroke-width="2"/>

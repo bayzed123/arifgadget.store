@@ -5,7 +5,6 @@ import type { Category, Product, StoreSettings } from '../lib/types';
 import { ProductCard } from '../components/ProductCard';
 import { Empty, Spinner } from '../components/ui';
 import { OfferStrip } from '../components/OfferPopup';
-import { money } from '../lib/format';
 
 interface Storefront {
   categories: Category[];
@@ -15,10 +14,12 @@ interface Storefront {
   settings: StoreSettings;
 }
 
+/* Kept to four, in the order a shopper worries about them: is it real, how do
+   I pay, what if it is wrong, when does it arrive. */
 const TRUST = [
-  { ic: '🏭', t: 'Factory direct', d: 'No middleman markup' },
-  { ic: '📉', t: 'Volume tiers', d: 'Unit price drops with qty' },
-  { ic: '🛡️', t: '7-day returns', d: 'On every sealed carton' },
+  { ic: '✅', t: 'Genuine products', d: 'Sourced direct, no fakes' },
+  { ic: '💵', t: 'Cash on delivery', d: 'Pay when it reaches you' },
+  { ic: '🛡️', t: '7-day returns', d: 'On every eligible item' },
   { ic: '⚡', t: 'Ships in 48h', d: 'Nationwide courier' },
 ];
 
@@ -47,50 +48,20 @@ export function Home() {
           />
         </div>
 
-        <aside className="hero-side">
-          <div className="promo-card">
-            <span className="eyebrow">Free delivery</span>
-            <p className="k">Over {money(data.settings.free_shipping_over)}</p>
-            <p className="small muted">
-              Below that, {money(data.settings.shipping_dhaka)} inside Dhaka and{' '}
-              {money(data.settings.shipping_outside)} anywhere else in Bangladesh.
-            </p>
-          </div>
-
-          {/*
-            Took the place of a "Bulk buyers — up to 22% off" card. Someone
-            landing on a shop wants to know they can reach a person, and the
-            owner's WhatsApp and email were only reachable from the footer.
-          */}
-          {(data.settings.support_whatsapp_url || data.settings.support_email) && (
-            <div className="promo-card">
-              <span className="eyebrow">Need help?</span>
-              <p className="k">We reply fast</p>
-              <p className="small muted">Ask about a product, an order or delivery — we are happy to help.</p>
-              <div className="stack gap-8" style={{ marginTop: 12 }}>
-                {data.settings.support_whatsapp_url && (
-                  <a
-                    className="btn ghost sm block"
-                    href={data.settings.support_whatsapp_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    💬 Chat on WhatsApp
-                  </a>
-                )}
-                {data.settings.support_email && (
-                  <a className="btn ghost sm block" href={`mailto:${data.settings.support_email}`}>
-                    ✉️ {data.settings.support_email}
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
-
-          <Link to="/catalog" className="btn dark block lg">
-            Browse all {data.categories.reduce((n, c) => n + (c.product_count ?? 0), 0)} products
+        {/*
+          The banner used to share the row with a stack of cards. Nothing up
+          here competes with it now — the two actions below are the ones the
+          banner itself invites, and everything else waits further down the
+          page where a shopper goes looking for it.
+        */}
+        <div className="hero-actions">
+          <Link to="/catalog" className="btn primary lg">
+            Shop now — {data.categories.reduce((n, c) => n + (c.product_count ?? 0), 0)} products
           </Link>
-        </aside>
+          <Link to="/track" className="btn ghost lg">
+            Track your order
+          </Link>
+        </div>
       </section>
 
       <OfferStrip />

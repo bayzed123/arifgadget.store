@@ -368,8 +368,13 @@ h3 { font-size: 1.1rem; }
 
 /* align-items:start keeps the banner at its natural 1600×560 ratio; stretching
    it to match the taller side column would crop the headline away. */
-.hero { display: grid; grid-template-columns: 1fr; gap: 18px; margin-bottom: 36px; align-items: start; }
-@media (min-width: 1040px) { .hero { grid-template-columns: 1fr 316px; } }
+/* One full-width banner. It shared this row with a stack of promo cards, which
+   crowded the top of the page and pushed the real content below the fold. */
+.hero { display: grid; gap: 16px; margin-bottom: 36px; align-items: start; }
+
+.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.hero-actions .btn { flex: 1 1 auto; justify-content: center; }
+@media (min-width: 620px) { .hero-actions .btn { flex: 0 0 auto; } }
 
 .hero-banner {
   border-radius: var(--radius-lg);
@@ -378,25 +383,6 @@ h3 { font-size: 1.1rem; }
   background: var(--navy);
 }
 .hero-banner img { width: 100%; height: auto; }
-
-.hero-side { display: grid; gap: 14px; align-content: start; }
-
-.promo-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 18px;
-  box-shadow: var(--shadow-sm);
-}
-.promo-card .k {
-  font-size: 1.5rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  background: linear-gradient(135deg, var(--brand), var(--gold));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
 
 .trust-strip {
   display: grid;
@@ -1015,6 +1001,33 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .footer h4 { color: #fff; font-size: 0.92rem; margin-bottom: 12px; }
 .footer a:hover { color: var(--gold); }
 .footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 30px; margin-bottom: 30px; }
+
+/*
+ * The "Need help?" block, which used to sit beside the hero banner. On the
+ * navy footer a plain ghost button disappears, so it gets its own light-on-dark
+ * variant rather than borrowing the storefront one.
+ */
+.help-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 22px;
+  margin-bottom: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.04);
+}
+.help-band h4 { margin-bottom: 4px; }
+.help-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.btn.on-dark {
+  background: none;
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #e2e8f0;
+}
+.btn.on-dark:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .footer-bot {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: 18px;
