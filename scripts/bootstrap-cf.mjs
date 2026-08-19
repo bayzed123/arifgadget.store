@@ -32,17 +32,24 @@ const cf = client();
  * this operation. [code: 7500]", which names neither the permission nor where
  * to grant it.
  *
- * The probe has to be a *write*. A read-only token is perfectly happy to run
- * `SELECT 1` through the same endpoint, so a SELECT here reports a false green
- * and the deploy still dies one step later — which is exactly what this check
- * did on its first outing. A scratch table created and immediately dropped is
- * the smallest thing D1 will refuse without the edit permission.
+ * The probe has to be a *write*: a read-only token happily runs `SELECT 1`
+ * through the same endpoint, so a SELECT reports a false green and the deploy
+ * dies one step later — which is exactly what this check did on its first
+ * outing.
+ *
+ * It also has to be a write D1 itself permits. Creating a scratch table looked
+ * like the smallest such write, but D1 reserves the `_cf_` table prefix for its
+ * own internals and its SQLite authorizer rejects the name outright — reported
+ * as `7500 not authorized: SQLITE_AUTH`, indistinguishable at a glance from the
+ * permission failure this exists to detect, and it sent one diagnosis badly
+ * astray. A no-op UPDATE matching no rows is a genuine write, touches nothing,
+ * and trips no reserved names.
  */
 async function assertD1Writable(databaseId) {
   try {
     await cf.call(`/d1/database/${databaseId}/query`, {
       method: 'POST',
-      body: { sql: 'CREATE TABLE IF NOT EXISTS _cf_write_probe (n INTEGER); DROP TABLE IF EXISTS _cf_write_probe;' },
+      body: { sql: "UPDATE settings SET value = value WHERE key = '__doctor_write_probe__'" },
     });
   } catch (err) {
     const denied = (err.errors ?? []).some((e) => e.code === 7500 || e.code === 10000);

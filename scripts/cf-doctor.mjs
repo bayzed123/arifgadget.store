@@ -120,7 +120,7 @@ await probe('D1 writes allowed', 'D1: Edit', async () => {
   if (!databaseId) throw new Error('skipped — no database resolved above');
   await cf.call(`/d1/database/${databaseId}/query`, {
     method: 'POST',
-    body: { sql: 'CREATE TABLE IF NOT EXISTS _cf_write_probe (n INTEGER); DROP TABLE IF EXISTS _cf_write_probe;' },
+    body: { sql: "UPDATE settings SET value = value WHERE key = '__doctor_write_probe__'" },
   });
   const tables = await cf.call(`/d1/database/${databaseId}/query`, {
     method: 'POST',
