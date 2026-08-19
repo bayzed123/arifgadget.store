@@ -44,8 +44,8 @@ Delivery is ৳90 inside Dhaka and ৳130 elsewhere, free-delivery threshold ৳
 the payment numbers and WhatsApp order line are in place, and the footer
 credits read SmartGen / Sayad Bayezid.
 
-`d1_migrations` already records all twelve files, so `wrangler d1 migrations
-apply` will report nothing to do rather than trying to build it a second time.
+`d1_migrations` already records all thirteen files, so `wrangler d1 migrations
+apply` reports nothing to do rather than trying to build it a second time.
 
 ### The automated calculation was tested on this database
 
@@ -74,17 +74,18 @@ without ever printing the token.
 
 ### 1. The API token cannot write to D1
 
-`wrangler d1 migrations apply` runs every statement through the D1 `query`
-endpoint, which Cloudflare classes as a write. The current token is refused
-there:
+Migrations are writes — `ALTER TABLE`, `CREATE INDEX` — and the current token
+is refused the moment one runs:
 
 ```
 A request to the Cloudflare API (/accounts/…/d1/database/3c619937-…/query) failed.
 You do not have permission to perform this operation. [code: 7500]
 ```
 
-The token authenticates into the right account and can *list* D1 databases, so
-the account ID is correct — it is the permission that is short.
+The token authenticates into the right account, lists D1 databases, and even
+runs a `SELECT` through the same endpoint. That last part is the trap: **D1
+Read covers reads through the query endpoint**, so anything short of an actual
+write reports success. Only `D1: Edit` allows a migration.
 
 **Fix:** *My Profile → API Tokens*, and either edit the token to add
 **Account → D1 → Edit**, or create a new one from the **"Edit Cloudflare
