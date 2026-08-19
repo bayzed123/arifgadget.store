@@ -33,6 +33,9 @@ const BLANK = {
   tags: '',
   status: 'active',
   featured: false,
+  category_name: '',
+  colours: '',
+  returnable: true,
 };
 
 export function ProductEditor({ product, categories, onClose, onSaved }: Props) {
@@ -68,6 +71,9 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
       tags: product.tags.join(', '),
       status: product.status,
       featured: product.featured,
+      category_name: '',
+      colours: (product.colours ?? []).join(', '),
+      returnable: product.returnable !== false,
     });
     setTiers(product.tiers);
     setSpecs(Object.entries(product.specs));
@@ -135,6 +141,11 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
       tags: form.tags,
       status: form.status,
       featured: form.featured,
+      // A typed name wins over the dropdown: staff only fill it in when they
+      // mean to create something the list does not have yet.
+      ...(form.category_name.trim() ? { category_name: form.category_name.trim() } : {}),
+      colours: form.colours,
+      returnable: form.returnable,
       tiers: tiers.filter((t) => t.min_qty > 0 && t.unit_price >= 0),
       specs: Object.fromEntries(specs.filter(([k]) => k.trim())),
     };
@@ -149,6 +160,23 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
     try {
       if (product) {
         await api(`/api/admin/products/${product.id}`, { method: 'PATCH', auth: true, body: payload });
+
+        // Stock is not part of the product PATCH on purpose: every movement
+        // belongs in the ledger with a reason and an actor, so a changed figure
+        // goes through the same endpoint the stock dialog uses rather than
+        // being written straight onto the row.
+        const wanted = Math.max(Number(form.stock) || 0, 0);
+        if (wanted !== product.stock) {
+          await api(`/api/admin/products/${product.id}/stock`, {
+            method: 'POST',
+            auth: true,
+            body: {
+              set: wanted,
+              reason: wanted > product.stock ? 'restock' : 'adjustment',
+              note: 'Edited in the product form',
+            },
+          });
+        }
         toast('Product updated', 'success');
       } else {
         await api('/api/admin/products', { method: 'POST', auth: true, body: payload });
@@ -205,7 +233,13 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
               <div className="form-grid">
                 <div className="field">
                   <label htmlFor="pcat">Category</label>
-                  <select id="pcat" className="select" value={form.category_id} onChange={(e) => set('category_id', e.target.value)}>
+                  <select
+                    id="pcat"
+                    className="select"
+                    value={form.category_id}
+                    onChange={(e) => set('category_id', e.target.value)}
+                    disabled={form.category_name.trim().length > 0}
+                  >
                     <option value="">Uncategorised</option>
                     {categories.map((category) => (
                       <option key={category.id} value={category.id}>
@@ -213,6 +247,24 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
                       </option>
                     ))}
                   </select>
+                  {/*
+                    Pick from the list, or type something new. Without this a
+                    shopkeeper adding their first drone would have to leave the
+                    product form, create the category elsewhere, and come back.
+                  */}
+                  <input
+                    className="input"
+                    style={{ marginTop: 6 }}
+                    maxLength={60}
+                    placeholder="…or type a new category name"
+                    value={form.category_name}
+                    onChange={(e) => set('category_name', e.target.value)}
+                  />
+                  <span className="hint">
+                    {form.category_name.trim()
+                      ? `A category called "${form.category_name.trim()}" will be created if it does not exist.`
+                      : 'Leave the box empty to use the list above.'}
+                  </span>
                 </div>
                 <div className="field">
                   <label htmlFor="pstatus">Status</label>
@@ -301,10 +353,30 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
                       type="number"
                       min="0"
                       value={form.stock}
-                      disabled={Boolean(product)}
                       onChange={(e) => set('stock', e.target.value)}
                     />
-                    {product && <span className="hint">Adjust stock from the products table so it lands in the ledger.</span>}
+                    {product && (
+                      <span className="hint">
+                        Change it here and the stock ledger records the adjustment automatically.
+                      </span>
+                    )}
+                  </div>
+                  <div className="field">
+                    <label htmlFor="pcolours">Colours</label>
+                    {/*
+                      One box, comma separated. Colour is not a stock-keeping
+                      unit here — the shop counts stock per product — so this
+                      lists what the customer can choose, and their choice is
+                      recorded on the order line for packing.
+                    */}
+                    <input
+                      id="pcolours"
+                      className="input"
+                      placeholder="Black, Silver, Blue"
+                      value={form.colours}
+                      onChange={(e) => set('colours', e.target.value)}
+                    />
+                    <span className="hint">Separate with commas. Leave empty if it comes in one colour only.</span>
                   </div>
                   <div className="field">
                     <label htmlFor="plow">Low-stock threshold</label>
@@ -514,6 +586,25 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
                     <input type="checkbox" checked={form.featured} onChange={(e) => set('featured', e.target.checked)} />
                     Feature on the homepage
                   </label>
+                  {/*
+                    Ticked by default, because most stock is returnable and the
+                    safer default for a shopper is the one that grants them the
+                    policy. Untick it for clearance and sealed lines, and the
+                    product page says so before the sale rather than after.
+                  */}
+                  <label className="row gap-8 small" style={{ fontWeight: 600, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={form.returnable}
+                      onChange={(e) => set('returnable', e.target.checked)}
+                    />
+                    Customer can return this item
+                  </label>
+                  <span className="hint">
+                    {form.returnable
+                      ? 'The 7-day return policy applies to this product.'
+                      : 'Shown as “Sold as-is” on the product page. Warranty still applies.'}
+                  </span>
                 </div>
               </div>
             </aside>

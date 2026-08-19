@@ -241,6 +241,40 @@ async function writeTiers(env: Env, productId: number, raw: unknown) {
  * a strange thing to do. Trimmed, de-duplicated, and capped so one paste
  * cannot fill the column.
  */
+/**
+ * Resolves the category for a product write.
+ *
+ * Staff can pick an existing category or simply type a new name — a shopkeeper
+ * adding the first drone should not have to visit a separate screen to invent
+ * "Drones" before they can save. A typed name that already exists is reused
+ * rather than duplicated, matched case-insensitively so "Drones" and "drones"
+ * do not become two categories.
+ *
+ * @returns the category id, or null for uncategorised.
+ */
+async function resolveCategory(env: Env, categoryId: unknown, typedName: unknown): Promise<number | null> {
+  const name = typeof typedName === 'string' ? typedName.trim() : '';
+  if (name) {
+    const slug = slugify(name);
+    const existing = await env.DB.prepare(
+      'SELECT id FROM categories WHERE slug = ? OR lower(name) = lower(?) LIMIT 1',
+    )
+      .bind(slug, name)
+      .first<{ id: number }>();
+    if (existing) return existing.id;
+
+    const created = await env.DB.prepare(
+      'INSERT INTO categories (slug, name, sort_order) VALUES (?, ?, 99) RETURNING id',
+    )
+      .bind(slug, name.slice(0, 60))
+      .first<{ id: number }>();
+    return created?.id ?? null;
+  }
+
+  if (categoryId === null || categoryId === undefined || categoryId === '') return null;
+  return Number(categoryId);
+}
+
 function parseColours(raw: unknown): string {
   const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : [];
   const cleaned = [...new Set(list.map((c) => String(c).trim()).filter(Boolean))].slice(0, 20);
@@ -274,7 +308,7 @@ admin.post('/products', async (c) => {
       slug,
       name,
       optionalString(body.brand, '', 80),
-      body.category_id ? Number(body.category_id) : null,
+      await resolveCategory(c.env, body.category_id, body.category_name),
       optionalString(body.summary, '', 300),
       optionalString(body.description, '', 5000),
       cost_price,
@@ -354,9 +388,9 @@ admin.patch('/products/:id', async (c) => {
     sets.push('returnable = ?');
     binds.push(body.returnable ? 1 : 0);
   }
-  if (body.category_id !== undefined) {
+  if (body.category_id !== undefined || body.category_name !== undefined) {
     sets.push('category_id = ?');
-    binds.push(body.category_id === null ? null : Number(body.category_id));
+    binds.push(await resolveCategory(c.env, body.category_id, body.category_name));
   }
   if (body.slug !== undefined) {
     sets.push('slug = ?');
