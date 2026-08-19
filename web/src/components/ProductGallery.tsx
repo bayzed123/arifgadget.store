@@ -1,0 +1,66 @@
+import { useEffect, useState } from 'react';
+import { mediaUrl } from '../lib/api';
+import { ProductThumb } from './ProductThumb';
+
+/**
+ * The product's photos on the shop side.
+ *
+ * One big picture with a row of thumbnails beneath it, in the order the
+ * dashboard set. With a single photo there is nothing to choose between, so
+ * the strip stays away entirely rather than showing a lone thumbnail of the
+ * picture already on screen.
+ */
+
+interface Props {
+  name: string;
+  imageUrl: string;
+  gallery: string[];
+  category?: string | null;
+}
+
+export function ProductGallery({ name, imageUrl, gallery, category }: Props) {
+  // A link typed into the dashboard can point at something that has since
+  // moved. Dropping it beats showing a shopper a broken-image icon.
+  const [dead, setDead] = useState<string[]>([]);
+  const images = [imageUrl, ...gallery].filter((url) => url && !dead.includes(url));
+  const [active, setActive] = useState(0);
+
+  // A different product means a different set; keep the big picture on the
+  // cover rather than on whatever index happened to be selected before.
+  useEffect(() => {
+    setActive(0);
+    setDead([]);
+  }, [imageUrl, gallery.join('|')]);
+
+  const current = images[active] ?? images[0] ?? '';
+
+  return (
+    <>
+      <div className="pdp-media">
+        <ProductThumb name={name} imageUrl={current} category={category} />
+      </div>
+
+      {images.length > 1 && (
+        <div className="pdp-thumbs" role="group" aria-label={`${name} pictures`}>
+          {images.map((url, index) => (
+            <button
+              key={`${url}-${index}`}
+              type="button"
+              className={index === active ? 'active' : ''}
+              aria-label={`Show picture ${index + 1} of ${images.length}`}
+              aria-pressed={index === active}
+              onClick={() => setActive(index)}
+            >
+              <img
+                src={mediaUrl(url)}
+                alt=""
+                loading="lazy"
+                onError={() => setDead((prev) => (prev.includes(url) ? prev : [...prev, url]))}
+              />
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}

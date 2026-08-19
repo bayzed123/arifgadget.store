@@ -930,6 +930,31 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 }
 .pdp-media img, .pdp-media svg { width: 100%; height: 100%; object-fit: cover; }
 
+/* Thumbnail strip under the main photo. Scrolls sideways rather than wrapping
+   into a second row, so the picture stays where the eye left it. */
+.pdp-thumbs {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.pdp-thumbs button {
+  flex: 0 0 auto;
+  width: 74px;
+  height: 62px;
+  padding: 0;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-inset);
+  cursor: pointer;
+}
+.pdp-thumbs button:hover { border-color: var(--line-strong); }
+.pdp-thumbs button.active { border-color: var(--brand); }
+.pdp-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
 .pdp-buy {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1745,4 +1770,106 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   .preview-split { grid-template-columns: 1fr; }
   .preview-frame { height: 60vh; min-height: 380px; }
   .preview-edit-panel { position: static; max-height: none; }
+}
+
+/* ============================================ product gallery editor */
+
+/*
+ * Used in the full product form and in the narrow live-preview panel, so it
+ * sizes its tiles from the space available rather than a fixed column count.
+ */
+.gallery-editor { display: grid; gap: 10px; }
+
+.gallery-drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  text-align: center;
+  justify-content: center;
+}
+.gallery-drop.over { border-color: var(--brand); background: var(--surface); }
+
+.gallery-url { display: flex; gap: 8px; }
+.gallery-url .input { flex: 1; min-width: 0; }
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.gallery-editor.compact .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); }
+
+.gallery-item {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-inset);
+}
+.gallery-item.is-main { border-color: var(--brand); }
+.gallery-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.gallery-tag {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--brand);
+}
+
+/* Always visible rather than hover-only: the dashboard is used on phones,
+   where there is no hover and an invisible control is simply a missing one. */
+.gallery-tools {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(15, 23, 42, 0.72);
+}
+.gallery-tools button {
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #fff;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.gallery-tools button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.22); }
+.gallery-tools button:disabled { opacity: 0.35; cursor: default; }
+.gallery-tools button.danger:hover { background: var(--bad); }
+
+.gallery-item.is-broken { border-color: var(--bad); border-style: dashed; }
+.gallery-broken {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  /* Clears the tool strip pinned to the bottom of every tile. */
+  padding: 6px 6px 30px;
+  text-align: center;
+  color: var(--ink-3);
+  overflow: hidden;
 }

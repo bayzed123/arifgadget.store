@@ -109,23 +109,53 @@ export async function api<T = unknown>(path: string, options: RequestOptions = {
   return payload as T;
 }
 
-/** Multipart upload — bypasses the JSON body path above. */
-export async function uploadImage(file: File): Promise<{ url: string; key: string }> {
+export interface UploadedImage {
+  url: string;
+  key: string;
+}
+
+/**
+ * Multipart upload — bypasses the JSON body path above.
+ *
+ * Takes the whole selection in one request, because staff pick a product's
+ * photos together and one failed file should stop the set rather than leave
+ * some uploaded and some not.
+ */
+export async function uploadImages(files: File[]): Promise<UploadedImage[]> {
+  if (!files.length) return [];
+
   const form = new FormData();
-  form.append('file', file);
+  for (const file of files) form.append('file', file);
 
   const token = getToken();
-  const res = await fetch(`${API_BASE}/api/admin/uploads`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
-  });
-
-  const payload = (await res.json().catch(() => null)) as { url?: string; key?: string; error?: string } | null;
-  if (!res.ok || !payload?.url) {
-    throw new ApiError(payload?.error ?? 'Upload failed', res.status);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/admin/uploads`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+  } catch {
+    throw new ApiError('Could not reach the store to upload. Check your connection and try again.', 0);
   }
-  return { url: payload.url, key: payload.key! };
+
+  const payload = (await res.json().catch(() => null)) as
+    | { files?: UploadedImage[]; url?: string; key?: string; error?: string }
+    | null;
+
+  if (!res.ok) throw new ApiError(payload?.error ?? 'Upload failed', res.status);
+
+  // Older Workers answered with a single url/key; accept both shapes so a
+  // dashboard that is ahead of the deployed API still uploads one at a time.
+  if (payload?.files?.length) return payload.files;
+  if (payload?.url) return [{ url: payload.url, key: payload.key ?? '' }];
+  throw new ApiError('Upload failed', res.status);
+}
+
+/** Single-file convenience wrapper over {@link uploadImages}. */
+export async function uploadImage(file: File): Promise<UploadedImage> {
+  const [uploaded] = await uploadImages([file]);
+  return uploaded;
 }
 
 /** Product images are stored as Worker-relative paths; absolute URLs pass through. */

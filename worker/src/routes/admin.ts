@@ -283,6 +283,26 @@ function parseColours(raw: unknown): string {
   return JSON.stringify(cleaned.map((c) => c.slice(0, 40)));
 }
 
+/** Gallery images beyond the main one. See MAX_GALLERY for why the cap exists. */
+export const MAX_GALLERY = 11;
+
+/**
+ * Cleans a list of extra product photos.
+ *
+ * Accepts either a real array or the newline/comma separated text a person
+ * pastes, because the dashboard offers both a file picker and a URL box and
+ * neither should need the other's shape. Duplicates go — the same photo twice
+ * is never intended — and the order staff chose is kept, since the first
+ * gallery image is the one shown right after the main photo.
+ */
+function parseGallery(raw: unknown): string {
+  const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/[\n,]/) : [];
+  const cleaned = [...new Set(list.map((u) => String(u).trim()).filter(Boolean))]
+    .map((u) => u.slice(0, 500))
+    .slice(0, MAX_GALLERY);
+  return JSON.stringify(cleaned);
+}
+
 admin.post('/products', async (c) => {
   requireOwner(c);
   const body = await readJson(c);
@@ -320,7 +340,7 @@ admin.post('/products', async (c) => {
       optionalInt(body.low_stock_threshold, 5),
       optionalInt(body.moq, 1, 1),
       optionalString(body.image_url, '', 500),
-      JSON.stringify(Array.isArray(body.gallery) ? body.gallery.slice(0, 12) : []),
+      parseGallery(body.gallery),
       JSON.stringify(typeof body.specs === 'object' && body.specs ? body.specs : {}),
       optionalString(body.tags, '', 300),
       ['active', 'draft', 'archived'].includes(String(body.status)) ? String(body.status) : 'active',
@@ -400,7 +420,7 @@ admin.patch('/products/:id', async (c) => {
   }
   if (body.gallery !== undefined) {
     sets.push('gallery = ?');
-    binds.push(JSON.stringify(Array.isArray(body.gallery) ? body.gallery.slice(0, 12) : []));
+    binds.push(parseGallery(body.gallery));
   }
   if (body.specs !== undefined) {
     sets.push('specs = ?');
@@ -677,6 +697,17 @@ function isUploadedFile(value: unknown): value is UploadedFile {
   return typeof value === 'object' && value !== null && 'stream' in value && 'size' in value;
 }
 
+/** One product's worth of photos in a single pick — see MAX_UPLOAD_FILES. */
+const MAX_UPLOAD_FILES = 12;
+
+/**
+ * Stores one or more images.
+ *
+ * Staff select a whole set of photos at once, so the endpoint takes the whole
+ * set: one request, one round trip, and either all of them land or the caller
+ * is told which one was rejected before anything is written. `url`/`key` still
+ * name the first file so a single-image caller sees the shape it always saw.
+ */
 admin.post('/uploads', async (c) => {
   if (!c.env.MEDIA) {
     throw new HTTPException(503, {
@@ -687,23 +718,35 @@ admin.post('/uploads', async (c) => {
   }
 
   const form = await c.req.raw.formData().catch(() => badRequest('Send a multipart/form-data body'));
-  const file: unknown = form.get('file');
-  if (!isUploadedFile(file)) badRequest('Attach the image as the "file" field');
+  // getAll is typed as string[] by workers-types; the runtime hands back File
+  // objects, which is what isUploadedFile actually checks for.
+  const files = (form.getAll('file') as unknown[]).filter(isUploadedFile);
+  if (!files.length) badRequest('Attach at least one image as a "file" field');
+  if (files.length > MAX_UPLOAD_FILES) badRequest(`Upload at most ${MAX_UPLOAD_FILES} images at a time`);
 
-  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-    badRequest(`Unsupported type "${file.type}". Use JPEG, PNG, WebP, AVIF or SVG.`);
+  // Validate the whole batch first. Half-storing a set and then failing would
+  // leave orphans in R2 that nothing in the dashboard ever references again.
+  for (const file of files) {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      badRequest(`Unsupported type "${file.type}" for "${file.name}". Use JPEG, PNG, WebP, AVIF or SVG.`);
+    }
+    if (file.size > MAX_UPLOAD_BYTES) badRequest(`"${file.name}" is over 5 MB. Please shrink it and try again.`);
   }
-  if (file.size > MAX_UPLOAD_BYTES) badRequest('Images must be 5 MB or smaller');
 
-  const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const key = `products/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const stored: { key: string; url: string }[] = [];
+  for (const file of files) {
+    const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const key = `products/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
 
-  await c.env.MEDIA.put(key, file.stream(), {
-    httpMetadata: { contentType: file.type, cacheControl: 'public, max-age=31536000, immutable' },
-  });
+    await c.env.MEDIA.put(key, file.stream(), {
+      httpMetadata: { contentType: file.type, cacheControl: 'public, max-age=31536000, immutable' },
+    });
 
-  await audit(c.env, c.get('admin').username, 'media.upload', 'file', key, `${file.size} bytes`);
-  return c.json({ ok: true, key, url: `/files/${key}` }, 201);
+    await audit(c.env, c.get('admin').username, 'media.upload', 'file', key, `${file.size} bytes`);
+    stored.push({ key, url: `/files/${key}` });
+  }
+
+  return c.json({ ok: true, files: stored, key: stored[0].key, url: stored[0].url }, 201);
 });
 
 // ---------------------------------------------------------------- settings & audit
