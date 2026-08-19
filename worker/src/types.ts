@@ -19,6 +19,12 @@ export interface Env {
   STEADFAST_SECRET_KEY?: string;
   /** Override for the courier's base URL. Only useful for their sandbox. */
   STEADFAST_BASE_URL?: string;
+  /**
+   * Secret path segment for the delivery webhook. Absent means the webhook
+   * route does not exist at all — the shop still works, updates just arrive
+   * when someone looks rather than the moment they happen.
+   */
+  STEADFAST_WEBHOOK_TOKEN?: string;
 }
 
 export interface AdminClaims {

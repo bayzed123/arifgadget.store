@@ -10,6 +10,7 @@ import { analytics } from './routes/analytics';
 import { content } from './routes/content';
 import { adminContent } from './routes/adminContent';
 import { account } from './routes/account';
+import { courierHook } from './routes/courierHook';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -62,6 +63,9 @@ app.route('/api', catalog);
 app.route('/api', orders);
 app.route('/api', content);
 app.route('/api/account', account);
+// Courier callbacks. Authenticated by a secret path segment, not a session,
+// because the caller is Steadfast rather than a person.
+app.route('/api/courier', courierHook);
 
 // Nested (not mounted separately) so these inherit the admin auth guard.
 admin.route('/analytics', analytics);

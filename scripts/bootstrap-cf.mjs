@@ -26,15 +26,31 @@ const WORKER_NAME = process.env.WORKER_NAME ?? 'arif-gadgets-api';
 const cf = client();
 
 /**
- * Listing D1 databases needs only read access; running a statement against one
- * needs D1: Edit. A token holding just the first sails through provisioning and
- * then dies in `wrangler d1 migrations apply` with "You do not have permission
- * to perform this operation. [code: 7500]", which names neither the permission
- * nor where to grant it. One harmless SELECT here turns that into an answer.
+ * Listing D1 databases needs only read access; changing one needs D1: Edit. A
+ * token holding just the first sails through provisioning and then dies in
+ * `wrangler d1 migrations apply` with "You do not have permission to perform
+ * this operation. [code: 7500]", which names neither the permission nor where
+ * to grant it.
+ *
+ * The probe has to be a *write*: a read-only token happily runs `SELECT 1`
+ * through the same endpoint, so a SELECT reports a false green and the deploy
+ * dies one step later — which is exactly what this check did on its first
+ * outing.
+ *
+ * It also has to be a write D1 itself permits. Creating a scratch table looked
+ * like the smallest such write, but D1 reserves the `_cf_` table prefix for its
+ * own internals and its SQLite authorizer rejects the name outright — reported
+ * as `7500 not authorized: SQLITE_AUTH`, indistinguishable at a glance from the
+ * permission failure this exists to detect, and it sent one diagnosis badly
+ * astray. A no-op UPDATE matching no rows is a genuine write, touches nothing,
+ * and trips no reserved names.
  */
 async function assertD1Writable(databaseId) {
   try {
-    await cf.call(`/d1/database/${databaseId}/query`, { method: 'POST', body: { sql: 'SELECT 1' } });
+    await cf.call(`/d1/database/${databaseId}/query`, {
+      method: 'POST',
+      body: { sql: "UPDATE settings SET value = value WHERE key = '__doctor_write_probe__'" },
+    });
   } catch (err) {
     const denied = (err.errors ?? []).some((e) => e.code === 7500 || e.code === 10000);
     if (!denied) throw err;

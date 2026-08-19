@@ -5,6 +5,9 @@ import { getSettings, loadTiers } from '../lib/catalog';
 import { computeCart, parseZone, type CartLineInput, type CartTotals, type DeliveryZone } from '../lib/pricing';
 import { currentCustomer } from './account';
 import { digitsSql, normalisePhone, phoneVariants } from '../lib/phone';
+import { courierConfigured } from '../lib/steadfast';
+import { syncOrderFromCourier, type CourierOrderRow } from '../lib/courierSync';
+import { isFinal } from '../lib/checkpoints';
 
 interface IncomingItem {
   product_id: number;
@@ -232,17 +235,31 @@ orders.get('/orders/:orderNo', async (c) => {
   const placeholders = variants.map(() => '?').join(', ');
 
   const order = await c.env.DB.prepare(
-    `SELECT order_no, customer_name, customer_phone, address, city, note, status,
+    `SELECT id, order_no, customer_name, customer_phone, address, city, note, status,
             subtotal, discount, shipping, tax, total,
-            payment_method, payment_reference, delivery_zone, created_at, updated_at
+            payment_method, payment_reference, delivery_zone, created_at, updated_at,
+            courier, consignment_id, tracking_code, courier_status, courier_synced_at
        FROM orders
       WHERE upper(order_no) = ?
         AND ${digitsSql('customer_phone')} IN (${placeholders})`,
   )
     .bind(orderNo, ...variants)
-    .first<{ order_no: string }>();
+    .first<
+      CourierOrderRow & {
+        courier: string;
+        tracking_code: string;
+        courier_status: string;
+        courier_synced_at: number | null;
+      }
+    >();
 
   if (!order) notFound('No order matches that number and phone');
+
+  // The shopper should see what the courier sees, not what the shop last
+  // happened to look at. Refreshed here rather than left to staff — but at most
+  // once every few minutes per order, so reloading the page cannot turn one
+  // impatient customer into a burst of calls on the courier's API.
+  const fresh = await refreshIfStale(c.env, order);
 
   const { results } = await c.env.DB.prepare(
     `SELECT oi.sku, oi.name, oi.image_url, oi.qty, oi.unit_price, oi.line_total
@@ -252,5 +269,48 @@ orders.get('/orders/:orderNo', async (c) => {
     .bind(order.order_no)
     .all();
 
-  return c.json({ order, items: results ?? [] });
+  // `id` is internal plumbing; the shopper's view is keyed by order number.
+  const { id: _id, ...visible } = order;
+
+  return c.json({
+    order: { ...visible, ...fresh },
+    items: results ?? [],
+  });
 });
+
+/** How long a stored courier status is treated as current. */
+const COURIER_TTL_SECONDS = 300;
+
+/**
+ * Refreshes an order's courier status if it has gone stale, and returns the
+ * fields that changed so the response can carry them without a second read.
+ *
+ * Settled orders are never refreshed: a delivered or returned parcel has
+ * nothing left to report, and asking anyway would spend a courier API call on
+ * every visit to an old order.
+ */
+async function refreshIfStale(
+  env: Env,
+  order: CourierOrderRow & { status: string; courier_status: string; courier_synced_at: number | null },
+): Promise<Partial<{ courier_status: string; courier_synced_at: number; status: string }>> {
+  if (!order.consignment_id || !courierConfigured(env)) return {};
+  if (isFinal(order.status)) return {};
+
+  const age = Math.floor(Date.now() / 1000) - (order.courier_synced_at ?? 0);
+  if (age < COURIER_TTL_SECONDS) return {};
+
+  // KV holds the rate limit rather than the timestamp column, so several
+  // shoppers hitting the same order at once still produce one courier call.
+  const guard = `courier:sync:${order.order_no}`;
+  if (await env.CACHE.get(guard)) return {};
+  await env.CACHE.put(guard, '1', { expirationTtl: COURIER_TTL_SECONDS });
+
+  const result = await syncOrderFromCourier(env, order, 'tracking');
+  if (result.error || !result.courier_status) return {};
+
+  return {
+    courier_status: result.courier_status,
+    courier_synced_at: Math.floor(Date.now() / 1000),
+    ...(result.moved_to ? { status: result.moved_to } : {}),
+  };
+}

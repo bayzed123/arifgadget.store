@@ -16,57 +16,16 @@ import {
 } from '../lib/http';
 import { hashPassword, randomSalt, signToken, verifyPassword, verifyToken } from '../lib/auth';
 import { PRODUCT_COLUMNS, loadTiers, toAdminProduct, type ProductRow } from '../lib/catalog';
+import { codAmountFor, courierBalance, courierConfigured, courierLabel, createConsignment } from '../lib/steadfast';
+import { ORDER_STATUSES, STATUS_ALIASES, NEXT_STATUSES, label } from '../lib/checkpoints';
 import {
-  checkpointFor,
-  codAmountFor,
-  courierBalance,
-  courierConfigured,
-  courierLabel,
-  createConsignment,
-  statusByConsignment,
-  statusByInvoice,
-} from '../lib/steadfast';
+  applyCourierCheckpoint,
+  syncOrderFromCourier,
+  type CourierOrderRow,
+  type SyncResult,
+} from '../lib/courierSync';
 
 const SESSION_HOURS = 12;
-/**
- * Courier-style delivery checkpoints. Two stored values carry a friendlier
- * label on screen, because `orders.status` has a CHECK constraint from the
- * first migration and rebuilding that table on a live shop is not worth a
- * rename (see migration 0009):
- *
- *   shipped  → "On the way"
- *   refunded → "Returned"
- */
-const ORDER_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'refunded', 'cancelled'];
-
-/** "returned" is the word everyone uses; accept it and store the legacy value. */
-const STATUS_ALIASES: Record<string, string> = { returned: 'refunded', on_the_way: 'shipped' };
-
-/**
- * Which checkpoint may follow which. This is not decoration: `returned` and
- * `cancelled` put every unit back on the shelf, so a route back into the
- * pipeline would leave stock credited twice and the ledger telling a lie.
- * Terminal states are therefore terminal.
- */
-const NEXT_STATUSES: Record<string, string[]> = {
-  pending: ['confirmed', 'cancelled'],
-  confirmed: ['shipped', 'cancelled'],
-  shipped: ['delivered', 'refunded'],
-  delivered: ['refunded'],
-  refunded: [],
-  cancelled: [],
-};
-
-/** What the shop calls each checkpoint, for error messages staff will read. */
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pending',
-  confirmed: 'Order confirmed',
-  shipped: 'On the way',
-  delivered: 'Delivered',
-  refunded: 'Returned',
-  cancelled: 'Cancelled',
-};
-const label = (status: string) => STATUS_LABELS[status] ?? status;
 
 export const admin = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -802,78 +761,6 @@ admin.get('/audit', async (c) => {
  * by a member of staff — never a side effect of an order arriving.
  */
 
-/** Row shape the courier helpers need. */
-interface CourierOrderRow {
-  id: number;
-  order_no: string;
-  status: string;
-  consignment_id: string;
-}
-
-/**
- * Moves an order to the checkpoint a courier status justifies, if the move is
- * legal from where the order stands.
- *
- * Deliberately routed through the same NEXT_STATUSES table as the manual
- * dashboard control rather than writing the status directly. A courier saying
- * "cancelled" for an order already marked Returned must not restock the same
- * units twice, and an external system is exactly the kind of caller that will
- * eventually say something twice.
- *
- * @returns the checkpoint moved to, or null if nothing changed.
- */
-async function applyCourierCheckpoint(
-  env: Env,
-  order: CourierOrderRow,
-  courierStatus: string,
-  actor: string,
-): Promise<string | null> {
-  const target = checkpointFor(courierStatus);
-  if (!target || target === order.status) return null;
-
-  const allowed = NEXT_STATUSES[order.status] ?? [];
-  if (!allowed.includes(target)) return null;
-
-  await env.DB.prepare('UPDATE orders SET status = ? WHERE id = ?').bind(target, order.id).run();
-  await audit(
-    env,
-    actor,
-    'order.courier',
-    'order',
-    order.id,
-    `${order.order_no}: ${label(order.status)} → ${label(target)} (Steadfast said "${courierStatus}")`,
-  );
-  return target;
-}
-
-/**
- * Asks the courier where one parcel is and records the answer.
- *
- * The raw courier status is always stored, whether or not it moves the order —
- * "on hold" and "awaiting approval" are precisely the states staff need to see,
- * and they justify no checkpoint change at all.
- */
-async function syncOne(
-  env: Env,
-  order: CourierOrderRow,
-  actor: string,
-): Promise<{ order_no: string; courier_status?: string; moved_to?: string; error?: string }> {
-  const lookup = order.consignment_id
-    ? await statusByConsignment(env, order.consignment_id)
-    : await statusByInvoice(env, order.order_no);
-
-  if (!lookup.ok) return { order_no: order.order_no, error: lookup.error };
-
-  await env.DB.prepare(
-    "UPDATE orders SET courier_status = ?, courier_synced_at = strftime('%s','now') WHERE id = ?",
-  )
-    .bind(lookup.data, order.id)
-    .run();
-
-  const moved = await applyCourierCheckpoint(env, order, lookup.data, actor);
-  return { order_no: order.order_no, courier_status: lookup.data, ...(moved ? { moved_to: moved } : {}) };
-}
-
 /**
  * Connection check. Reads the courier account balance, which proves both keys
  * are right without booking anything, so staff can press it as often as they
@@ -980,13 +867,9 @@ admin.post('/orders/:id/courier/sync', async (c) => {
   if (!order) notFound('Order not found');
   if (!order.consignment_id) badRequest('This order has not been sent to Steadfast yet.');
 
-  const result = await syncOne(c.env, order, c.get('admin').username);
+  const result = await syncOrderFromCourier(c.env, order, c.get('admin').username);
   if (result.error) throw new HTTPException(502, { message: result.error });
-
-  return c.json({
-    ...result,
-    courier_status_label: courierLabel(result.courier_status ?? ''),
-  });
+  return c.json(result);
 });
 
 /**
@@ -1009,13 +892,13 @@ admin.post('/courier/sync', async (c) => {
   ).all<CourierOrderRow>();
 
   const pending = results ?? [];
-  const synced: Awaited<ReturnType<typeof syncOne>>[] = [];
+  const synced: SyncResult[] = [];
 
   // Four at a time: fast enough to feel instant on a normal day's orders,
   // slow enough to stay well inside the Worker's subrequest allowance.
   for (let i = 0; i < pending.length; i += 4) {
     const batch = pending.slice(i, i + 4);
-    synced.push(...(await Promise.all(batch.map((order) => syncOne(c.env, order, c.get('admin').username)))));
+    synced.push(...(await Promise.all(batch.map((order) => syncOrderFromCourier(c.env, order, c.get('admin').username)))));
   }
 
   return c.json({

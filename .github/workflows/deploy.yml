@@ -71,8 +71,14 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           # Steadfast courier. Optional: unset simply leaves the courier panel
           # reporting itself as not connected.
-          STEADFAST_API_KEY: ${{ secrets.STEADFAST_API_KEY }}
-          STEADFAST_SECRET_KEY: ${{ secrets.STEADFAST_SECRET_KEY }}
+          # Both spellings accepted. The repository happens to hold the
+          # STEAT_FAST_* pair; reading either avoids a rename that would only
+          # exist to satisfy this file, and mirrors how CLOUD_FLARE_API is read.
+          STEADFAST_API_KEY: ${{ secrets.STEADFAST_API_KEY || secrets.STEAT_FAST_API }}
+          STEADFAST_SECRET_KEY: ${{ secrets.STEADFAST_SECRET_KEY || secrets.STEAT_FAST_SECRET_KEY }}
+          # Only needed for the push-based webhook. Without it the shop polls
+          # instead, which works — updates just arrive on refresh, not instantly.
+          STEADFAST_WEBHOOK_TOKEN: ${{ secrets.STEADFAST_WEBHOOK_TOKEN }}
         run: node scripts/provision-secrets.mjs
 
       - name: Provision the dashboard owner

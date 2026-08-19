@@ -15,9 +15,9 @@ then.
 
 | Resource | Name | Status |
 |---|---|---|
-| D1 database | `arif-gadgets` | `3c619937-10e9-43ec-9e9f-c0fd0c1da71c` — **built: all 12 migrations applied and verified** |
+| D1 database | `arif-gadgets` | `3c619937-10e9-43ec-9e9f-c0fd0c1da71c` — **built: all 13 migrations applied and verified** |
 | KV namespace | `arif-gadgets-cache` | `a7c032dadfd54f89afd5b01134ec8973` — created |
-| R2 bucket | `arif-gadgets-media` | not created — R2 is not switched on for this account |
+| R2 bucket | `arif-gadgets-media` | created — R2 is enabled, so dashboard image upload works |
 | Worker | `arif-gadgets-api` | not deployed yet |
 | workers.dev subdomain | — | **not registered** |
 
@@ -44,8 +44,8 @@ Delivery is ৳90 inside Dhaka and ৳130 elsewhere, free-delivery threshold ৳
 the payment numbers and WhatsApp order line are in place, and the footer
 credits read SmartGen / Sayad Bayezid.
 
-`d1_migrations` already records all twelve files, so `wrangler d1 migrations
-apply` will report nothing to do rather than trying to build it a second time.
+`d1_migrations` already records all thirteen files, so `wrangler d1 migrations
+apply` reports nothing to do rather than trying to build it a second time.
 
 ### The automated calculation was tested on this database
 
@@ -61,10 +61,10 @@ removed, leaving the counts above unchanged:
   removed the revenue from the daily view again
 - the ledger recorded exactly one `sale` and one `return`
 
-**R2** stays optional. Without it, image *upload* in the dashboard returns a
-clear "storage is not enabled" message and pasting an image URL works as
-normal — the same behaviour as the previous account. Enabling R2 in the
-Cloudflare dashboard turns upload on at the next deploy, with no code change.
+**R2** is now switched on and the bucket exists, so uploading a product photo
+in the dashboard works from the first deploy. (The code still degrades
+gracefully if R2 is ever turned off: upload reports "storage is not enabled"
+and pasting an image URL keeps working.)
 
 ## Two things block the deploy
 
@@ -74,17 +74,18 @@ without ever printing the token.
 
 ### 1. The API token cannot write to D1
 
-`wrangler d1 migrations apply` runs every statement through the D1 `query`
-endpoint, which Cloudflare classes as a write. The current token is refused
-there:
+Migrations are writes — `ALTER TABLE`, `CREATE INDEX` — and the current token
+is refused the moment one runs:
 
 ```
 A request to the Cloudflare API (/accounts/…/d1/database/3c619937-…/query) failed.
 You do not have permission to perform this operation. [code: 7500]
 ```
 
-The token authenticates into the right account and can *list* D1 databases, so
-the account ID is correct — it is the permission that is short.
+The token authenticates into the right account, lists D1 databases, and even
+runs a `SELECT` through the same endpoint. That last part is the trap: **D1
+Read covers reads through the query endpoint**, so anything short of an actual
+write reports success. Only `D1: Edit` allows a migration.
 
 **Fix:** *My Profile → API Tokens*, and either edit the token to add
 **Account → D1 → Edit**, or create a new one from the **"Edit Cloudflare
@@ -124,6 +125,7 @@ Two repository secrets connect the shop to the courier:
 |---|---|
 | `STEADFAST_API_KEY` | Api-Key from the Steadfast portal |
 | `STEADFAST_SECRET_KEY` | Secret-Key from the same page |
+| `STEADFAST_WEBHOOK_TOKEN` | Optional. A long random string you invent — see below |
 
 The deploy writes both onto the Worker. Leaving them unset is a supported
 state: the dashboard shows "Steadfast not connected", the send-to-courier
@@ -135,6 +137,30 @@ Both keys authorise real bookings and control COD collection, so treat them
 like a bank credential: rotate them in the Steadfast portal if they are ever
 pasted into a chat, an email or a ticket, and put the replacement straight into
 the GitHub secret.
+
+### How shoppers see courier updates
+
+The tracking page shows the courier's own status next to the shop's
+checkpoints, and refreshes it from Steadfast when the stored copy is more than
+five minutes old — rate-limited through KV, so a shopper reloading the page
+cannot turn into a burst of calls on the courier's API. Settled orders are
+never refreshed; a delivered parcel has nothing left to report.
+
+That means **the webhook is optional**. Without it everything works, updates
+just arrive when someone looks rather than the instant they happen.
+
+To turn it on: invent a long random string, set it as `STEADFAST_WEBHOOK_TOKEN`,
+deploy, then give Steadfast this URL:
+
+```
+https://<your-api-host>/api/courier/steadfast/<the-token>
+```
+
+The token *is* the authentication — the route 404s on a wrong or missing one,
+so a scanner cannot even tell the endpoint exists. Treat that URL as a password
+and do not paste it anywhere public. The endpoint answers 200 even for payloads
+it cannot use, because a webhook that returns errors gets switched off at the
+sender's end.
 
 ## The dashboard owner
 
