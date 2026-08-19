@@ -48,6 +48,57 @@ await probe('Account readable', 'Account Settings: Read', async () => {
   return account?.name ? `"${account.name}"` : 'ok';
 });
 
+/**
+ * Which token is actually in the repository secret, and what it can do.
+ *
+ * Ticking a box in the dashboard and saving it are two different things, and a
+ * repository with several similarly-named secrets makes it easy to paste a new
+ * token over the wrong one. Both mistakes look identical from the outside — the
+ * calls simply keep getting refused — so this asks Cloudflare to name the token
+ * and list its own permissions rather than inferring from failures.
+ *
+ * Never prints the token, only its name and the permissions attached to it.
+ */
+async function describeToken() {
+  const verified = await cf.callRoot('/user/tokens/verify');
+  if (!verified?.id) {
+    console.log('  ℹ️  Token identity          could not be read (needs "User API Tokens: Read")');
+    return;
+  }
+
+  let token = null;
+  try {
+    token = await cf.call(`/tokens/${verified.id}`);
+  } catch {
+    try {
+      token = await cf.callRoot(`/user/tokens/${verified.id}`);
+    } catch {
+      /* fall through */
+    }
+  }
+
+  if (!token) {
+    console.log(`  ℹ️  Token identity          id ${verified.id.slice(0, 8)}… — status ${verified.status}`);
+    console.log('      Its permission list is not readable with this token, so the checks below');
+    console.log('      are the only evidence of what it can do.');
+    return;
+  }
+
+  const groups = (token.policies ?? []).flatMap((p) => (p.permission_groups ?? []).map((g) => g.name));
+  const writes = groups.filter((name) => /write|edit/i.test(name));
+
+  console.log(`  ℹ️  Token in CLOUD_FLARE_API  "${token.name ?? 'unnamed'}" — ${groups.length} permissions`);
+  console.log(`      of which write-capable:   ${writes.length}`);
+  for (const name of ['D1', 'Workers Scripts', 'Workers KV Storage', 'Workers R2 Storage']) {
+    const held = groups.filter((g) => g.startsWith(name));
+    const canWrite = held.some((g) => /write|edit/i.test(g));
+    console.log(`      ${canWrite ? '✅' : '❌'} ${name.padEnd(20)} ${held.join(', ') || 'not granted at all'}`);
+  }
+  console.log('');
+}
+
+await describeToken();
+
 /* ── D1 ──────────────────────────────────────────────────────────────── */
 
 let databaseId = null;
