@@ -104,10 +104,20 @@ await probe('KV writes allowed', 'Workers KV Storage: Edit', async () => {
 
 /* ── Workers ─────────────────────────────────────────────────────────── */
 
-await probe('Worker scripts listable', 'Workers Scripts: Edit', async () => {
+/**
+ * Read-only on purpose, and therefore not proof of anything.
+ *
+ * The only call that proves a token can publish is uploading a script, and a
+ * diagnostic must not deploy over the live Worker to find out. So this reports
+ * what it can see and the summary below always asks for Workers Scripts: Edit
+ * alongside any other missing permission — a token short of one Edit is
+ * invariably short of that one too, and a green tick here has already been
+ * misread once as "publishing works".
+ */
+await probe('Worker scripts listable (read only)', 'Workers Scripts: Edit', async () => {
   const scripts = await cf.call('/workers/scripts');
   const names = (scripts ?? []).map((s) => s.id);
-  return names.length ? names.join(', ') : 'none deployed yet';
+  return `${names.length ? names.join(', ') : 'none deployed yet'} — publishing is not probed here`;
 });
 
 let subdomain = null;
@@ -137,6 +147,12 @@ await probe(`Zone for ${SITE_DOMAIN}`, 'Zone: Read', async () => {
 
 const failed = results.filter((r) => !r.ok);
 const missing = [...new Set(failed.map((r) => r.permission))];
+
+// Publishing cannot be probed without deploying, so it is inferred: a token
+// missing any Edit permission has never yet turned out to hold this one.
+if (missing.length && !missing.includes('Workers Scripts: Edit')) {
+  missing.push('Workers Scripts: Edit (cannot be probed — asked for on principle)');
+}
 
 console.log('\n────────────────────────────────────────────────────────────────\n');
 
