@@ -28,7 +28,11 @@ const DEFAULT_BASE = 'https://portal.packzy.com/api/v1';
 /** Courier calls should not be able to hang a dashboard request. */
 const TIMEOUT_MS = 12_000;
 
-export type CourierResult<T> = { ok: true; data: T } | { ok: false; error: string };
+export type CourierResult<T> =
+  | { ok: true; data: T }
+  /** `status` is the courier's HTTP code when there was one — it is what tells
+   *  a rejected key (401) apart from a portal that is simply down (5xx). */
+  | { ok: false; error: string; status?: number };
 
 /**
  * Steadfast's own vocabulary. Wider than this shop's six checkpoints, and
@@ -115,6 +119,32 @@ function credentials(env: Env): Credentials | null {
 /** True when the Worker has both keys. Lets the UI say "not connected" instead of failing. */
 export const courierConfigured = (env: Env): boolean => credentials(env) !== null;
 
+/**
+ * What the dashboard is allowed to know about the credentials.
+ *
+ * Which keys exist and how long they are — never a character of their value.
+ * The length is what separates "the secret is missing" from "the secret holds
+ * the wrong thing", and it was the missing fact that made a rejected key
+ * indistinguishable from an unset one.
+ */
+export function credentialShape(env: Env): {
+  api_key_present: boolean;
+  secret_key_present: boolean;
+  api_key_length: number;
+  secret_key_length: number;
+  base_url: string;
+} {
+  const apiKey = env.STEADFAST_API_KEY?.trim() ?? '';
+  const secretKey = env.STEADFAST_SECRET_KEY?.trim() ?? '';
+  return {
+    api_key_present: apiKey.length > 0,
+    secret_key_present: secretKey.length > 0,
+    api_key_length: apiKey.length,
+    secret_key_length: secretKey.length,
+    base_url: (env.STEADFAST_BASE_URL?.trim() || DEFAULT_BASE).replace(/\/$/, ''),
+  };
+}
+
 /* ─────────────────────────── transport ─────────────────────────── */
 
 async function call<T>(env: Env, path: string, init?: { method: string; body: unknown }): Promise<CourierResult<T>> {
@@ -149,7 +179,11 @@ async function call<T>(env: Env, path: string, init?: { method: string; body: un
     } catch {
       // A courier portal in maintenance answers with an HTML page. Say so
       // plainly rather than pasting markup into the dashboard.
-      return { ok: false, error: `Steadfast replied with ${res.status} and something that was not JSON.` };
+      return {
+        ok: false,
+        status: res.status,
+        error: `Steadfast replied with ${res.status} and something that was not JSON.`,
+      };
     }
 
     const body = payload as { status?: number; message?: string; errors?: Record<string, string[]> } | null;
@@ -163,6 +197,7 @@ async function call<T>(env: Env, path: string, init?: { method: string; body: un
         : '';
       return {
         ok: false,
+        status: typeof body?.status === 'number' ? body.status : res.status,
         error: fieldErrors || body?.message || `Steadfast returned ${res.status}.`,
       };
     }

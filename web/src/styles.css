@@ -1886,3 +1886,27 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   color: var(--ink-3);
   overflow: hidden;
 }
+
+/* ============================================ courier connection banner */
+
+/*
+ * Sits at the top of Orders and inside the dashboard's courier panel. A failed
+ * courier stops parcels being booked at all, so it is deliberately a block with
+ * room for the reason rather than a badge with a tooltip nobody hovers.
+ */
+.courier-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.courier-banner.ok { border-left-color: var(--good); background: var(--good-soft); }
+.courier-banner.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+.courier-banner p { margin: 0; }
