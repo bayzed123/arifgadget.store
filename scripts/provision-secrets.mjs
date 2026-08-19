@@ -49,7 +49,15 @@ if (process.env.JWT_SECRET) {
  * courier panel reports itself as not connected and the rest of the shop is
  * unaffected — so a missing key is reported, never invented.
  */
-for (const name of ['STEADFAST_API_KEY', 'STEADFAST_SECRET_KEY', 'STEADFAST_WEBHOOK_TOKEN']) {
+const COURIER_SECRETS = {
+  STEADFAST_API_KEY: 'the courier panel reports itself as not connected',
+  STEADFAST_SECRET_KEY: 'the courier panel reports itself as not connected',
+  // Genuinely optional, and the shop is fully connected without it — saying
+  // otherwise made a healthy deploy read like a broken one.
+  STEADFAST_WEBHOOK_TOKEN: 'courier updates arrive on refresh rather than instantly, which is fine',
+};
+
+for (const [name, consequence] of Object.entries(COURIER_SECRETS)) {
   const value = process.env[name]?.trim();
   if (value) {
     await put(name, value);
@@ -57,6 +65,6 @@ for (const name of ['STEADFAST_API_KEY', 'STEADFAST_SECRET_KEY', 'STEADFAST_WEBH
   } else if (names.has(name)) {
     console.log(`${name} already present on the Worker — left unchanged.`);
   } else {
-    console.log(`${name} not provided — Steadfast stays disconnected until it is.`);
+    console.log(`${name} not provided — ${consequence}.`);
   }
 }
