@@ -164,8 +164,10 @@ admin.get('/products', async (c) => {
     binds.push(stockState);
   }
   if (q) {
-    where.push('(p.name LIKE ? OR p.sku LIKE ? OR p.brand LIKE ?)');
-    binds.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    // Slug included so a pasted product URL — or the live preview, which knows
+    // a product only by the slug in its address — resolves to the right row.
+    where.push('(p.name LIKE ? OR p.sku LIKE ? OR p.brand LIKE ? OR p.slug LIKE ?)');
+    binds.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
   const whereSql = where.join(' AND ');
 

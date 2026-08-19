@@ -11,6 +11,7 @@ import { MenuDrawer } from './MenuDrawer';
 import { BottomNav } from './BottomNav';
 import { OfferPopup } from './OfferPopup';
 import { trackPageView, trackSearch } from '../lib/analytics';
+import { announceRoute, isPreviewMessage } from '../lib/previewBridge';
 
 export function Layout() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -27,6 +28,25 @@ export function Layout() {
 
   // Close the drawer whenever the route changes, including on back/forward.
   useEffect(() => setMenuOpen(false), [pathname, params]);
+
+  /**
+   * Tell the dashboard which page is on screen when it is previewing the shop.
+   * A no-op for real visitors — nothing is framing their browser.
+   */
+  useEffect(() => {
+    announceRoute(pathname);
+  }, [pathname]);
+
+  /** The dashboard asks for a reload after saving an edit. */
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      if (!isPreviewMessage(event.data) || event.data.type !== 'reload') return;
+      window.location.reload();
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
 
   // The base tag has send_page_view off, so the router owns every page_view —
   // including the first. Without this a single-page app reports one screen.

@@ -21,6 +21,7 @@ import { Settings } from './pages/admin/Settings';
 import { Content } from './pages/admin/Content';
 import { Customers } from './pages/admin/Customers';
 import { Guide } from './pages/admin/Guide';
+import { Preview } from './pages/admin/Preview';
 
 // Vite's BASE_URL is "/" on a custom domain and "/<repo>/" on project Pages.
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -50,6 +51,7 @@ export function App() {
 
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<Dashboard />} />
+                <Route path="preview" element={<Preview />} />
                 <Route path="products" element={<Products />} />
                 <Route path="orders" element={<Orders />} />
                 <Route path="inventory" element={<Inventory />} />
