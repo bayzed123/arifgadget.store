@@ -7,6 +7,7 @@ import type { DeliveryZone, Quote } from '../lib/types';
 import { money, number } from '../lib/format';
 import { ProductThumb } from '../components/ProductThumb';
 import { Empty, Spinner } from '../components/ui';
+import { useSeo } from '../lib/seo';
 
 /**
  * The cart never prices itself. Every quantity change asks the Worker to
@@ -124,6 +125,7 @@ export function OrderSummary({ quote, loading }: { quote: Quote | null; loading:
 }
 
 export function Cart() {
+  useSeo({ title: 'Your Cart', noindex: true });
   const cart = useCart();
   const { quote, loading, error } = useQuote(cart.items);
 

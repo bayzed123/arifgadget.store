@@ -5,6 +5,7 @@ import type { Category, Product, StoreSettings } from '../lib/types';
 import { ProductCard } from '../components/ProductCard';
 import { Empty, Spinner } from '../components/ui';
 import { OfferStrip } from '../components/OfferPopup';
+import { useSeo } from '../lib/seo';
 
 interface Storefront {
   categories: Category[];
@@ -32,6 +33,12 @@ export function Home() {
       .then(setData)
       .catch((err: Error) => setError(err.message));
   }, []);
+
+  useSeo({
+    title: 'Wholesale Gadgets, Factory Direct',
+    description:
+      'Arif Gadgets supplies phones, audio, wearables and accessories at wholesale tiers. Live stock, volume pricing, ships in 48 hours across Bangladesh.',
+  });
 
   if (error) return <Empty icon="⚠️" title="Could not load the storefront" hint={error} />;
   if (!data) return <Spinner />;

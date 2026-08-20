@@ -5,6 +5,7 @@ import { date } from '../lib/format';
 import type { Post, PostSummary } from '../lib/types';
 import { Prose } from '../components/Prose';
 import { Empty, Spinner } from '../components/ui';
+import { useSeo } from '../lib/seo';
 
 function Cover({ url, title }: { url: string; title: string }) {
   if (url) return <img src={mediaUrl(url)} alt={title} loading="lazy" />;
@@ -32,6 +33,11 @@ export function Blog() {
       .then((res) => setPosts(res.posts))
       .catch((err: Error) => setError(err.message));
   }, []);
+
+  useSeo({
+    title: 'Blog',
+    description: 'Product guides, buying advice and shop news from Arif Gadgets.',
+  });
 
   if (error) return <Empty icon="⚠️" title="Could not load the blog" hint={error} />;
   if (!posts) return <Spinner />;
@@ -87,6 +93,11 @@ export function BlogPost() {
       })
       .catch((err: Error) => setError(err.message));
   }, [slug]);
+
+  useSeo({
+    title: post ? post.title : 'Blog post',
+    description: post?.excerpt || undefined,
+  });
 
   if (error) return <Empty icon="📄" title="Post not found" hint={error} />;
   if (!post) return <Spinner />;

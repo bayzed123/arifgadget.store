@@ -5,6 +5,7 @@ import { dateTime, money, number, orderStatus } from '../lib/format';
 import type { StoreSettings } from '../lib/types';
 import { Spinner } from '../components/ui';
 import { Logo } from '../components/Logo';
+import { useSeo } from '../lib/seo';
 
 interface InvoiceOrder {
   order_no: string;
@@ -43,6 +44,7 @@ interface InvoiceItem {
  * phone without a download the sandbox might block.
  */
 export function Invoice() {
+  useSeo({ title: 'Invoice', noindex: true });
   const { orderNo = '' } = useParams();
   const [params] = useSearchParams();
   const phone = params.get('phone') ?? '';

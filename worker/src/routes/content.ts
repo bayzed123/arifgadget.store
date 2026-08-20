@@ -8,10 +8,10 @@ export const content = new Hono<{ Bindings: Env; Variables: Variables }>();
 /** Footer navigation: titles and slugs only, grouped by section. */
 content.get('/pages', async (c) => {
   const { results } = await c.env.DB.prepare(
-    `SELECT slug, title, section, summary FROM pages
+    `SELECT slug, title, section, summary, updated_at FROM pages
       WHERE published = 1 AND section <> 'hidden'
       ORDER BY section ASC, sort_order ASC, title ASC`,
-  ).all<{ slug: string; title: string; section: string; summary: string }>();
+  ).all<{ slug: string; title: string; section: string; summary: string; updated_at: number }>();
 
   const pages = results ?? [];
   return c.json({

@@ -10,6 +10,23 @@ import { ReviewSection } from '../components/ReviewSection';
 import { Empty, Rating, Spinner, StockBadge } from '../components/ui';
 import { setDirectBuy, useCart, useCustomer, useToast, useWishlist } from '../lib/store';
 import { trackAddToCart, trackSelectItem, trackViewItem } from '../lib/analytics';
+import { useSeo, useJsonLd } from '../lib/seo';
+import { mediaUrl } from '../lib/api';
+
+/** Markdown → plain text, for the one-line description schema.org wants. Good
+ * enough for JSON-LD; the rich version stays in the on-page Prose render. */
+function plainText(markdown: string, max = 500): string {
+  const text = markdown
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^[-*>]\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
 
 /** Mirrors the Worker's tier resolution so the page can price instantly. */
 function unitPriceFor(product: ProductType, qty: number): number {
@@ -60,6 +77,71 @@ export function Product() {
     });
     return index;
   }, [product, qty]);
+
+  useSeo({
+    title: product ? `${product.name}${product.brand ? ` — ${product.brand}` : ''}` : 'Product',
+    description: product?.summary || undefined,
+  });
+
+  // Product + Offer + (when there are reviews) AggregateRating — the markup
+  // Google's rich-result and Merchant listing eligibility both key off. Only
+  // rendered once the product has loaded, and removed again on unmount so a
+  // stale product's schema never survives a route change to another PDP.
+  useJsonLd(
+    'product',
+    product
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: product.name,
+          sku: product.sku,
+          description: product.summary || plainText(product.description) || product.name,
+          image: [product.image_url, ...product.gallery].filter(Boolean).map(mediaUrl),
+          ...(product.brand ? { brand: { '@type': 'Brand', name: product.brand } } : {}),
+          offers: {
+            '@type': 'Offer',
+            url: window.location.href,
+            priceCurrency: 'BDT',
+            price: (product.price / 100).toFixed(2),
+            availability: product.in_stock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+            itemCondition: 'https://schema.org/NewCondition',
+          },
+          ...(product.review_count > 0
+            ? {
+                aggregateRating: {
+                  '@type': 'AggregateRating',
+                  ratingValue: product.rating,
+                  reviewCount: product.review_count,
+                },
+              }
+            : {}),
+        }
+      : null,
+  );
+
+  useJsonLd(
+    'breadcrumbs',
+    product
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            { '@type': 'ListItem', position: 1, name: 'Home', item: window.location.origin },
+            ...(product.category
+              ? [
+                  {
+                    '@type': 'ListItem',
+                    position: 2,
+                    name: product.category.name,
+                    item: `${window.location.origin}/catalog?category=${product.category.slug}`,
+                  },
+                ]
+              : []),
+            { '@type': 'ListItem', position: product.category ? 3 : 2, name: product.name, item: window.location.href },
+          ],
+        }
+      : null,
+  );
 
   if (error) return <Empty icon="⚠️" title="Product not found" hint={error} />;
   if (!product) return <Spinner />;

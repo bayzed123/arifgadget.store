@@ -12,6 +12,7 @@ import {
   REVERSED_STATUSES,
 } from '../lib/format';
 import { ProductThumb } from '../components/ProductThumb';
+import { useSeo } from '../lib/seo';
 
 interface TrackedOrder {
   order_no: string;
@@ -44,6 +45,10 @@ interface TrackedItem {
 
 
 export function Track() {
+  // A lookup form, not a page with content of its own to rank on — and any
+  // result it shows is one shopper's own order details, which has no
+  // business in a search result even if it briefly appeared in the URL.
+  useSeo({ title: 'Track Your Order', noindex: true });
   const [params, setParams] = useSearchParams();
   const { customer } = useCustomer();
   const [orderNo, setOrderNo] = useState(params.get('order') ?? '');

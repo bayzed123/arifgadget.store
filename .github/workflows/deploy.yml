@@ -191,6 +191,23 @@ jobs:
           touch web/dist/.nojekyll
           if [ -n "$CUSTOM_DOMAIN" ]; then echo "$CUSTOM_DOMAIN" > web/dist/CNAME; fi
 
+      # Every product, category, page and blog post that exists right now —
+      # regenerated fresh on every deploy, so nothing needs hand-maintaining
+      # and nothing that was added yesterday is ever missing.
+      - name: Generate sitemap
+        env:
+          VITE_API_BASE: ${{ needs.api.outputs.api_url }}
+          CUSTOM_DOMAIN: ${{ steps.site.outputs.domain }}
+          PAGES_BASE: ${{ steps.site.outputs.base }}
+        run: |
+          if [ -n "$CUSTOM_DOMAIN" ]; then
+            SITE_URL="https://$CUSTOM_DOMAIN"
+          else
+            SITE_URL="https://${{ github.repository_owner }}.github.io${PAGES_BASE%/}"
+          fi
+          echo "Site URL for sitemap: $SITE_URL"
+          SITE_URL="$SITE_URL" node scripts/generate-sitemap.mjs
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3

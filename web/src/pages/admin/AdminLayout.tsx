@@ -5,6 +5,7 @@ import { Spinner } from '../../components/ui';
 import { Login } from './Login';
 import { ImageZoom } from '../../components/ImageZoom';
 import { NotificationBell } from '../../components/NotificationBell';
+import { useSeo } from '../../lib/seo';
 
 const NAV = [
   { to: '/admin', end: true, icon: '📊', label: 'Dashboard' },
@@ -15,6 +16,7 @@ const NAV = [
   { to: '/admin/customers', icon: '👥', label: 'Customers' },
   { to: '/admin/reviews', icon: '⭐', label: 'Ratings' },
   { to: '/admin/analytics', icon: '📈', label: 'Analytics' },
+  { to: '/admin/calculators', icon: '🧮', label: 'Calculators' },
   { to: '/admin/inventory', icon: '🏷️', label: 'Inventory' },
   { to: '/admin/offers', icon: '📣', label: 'Offers & popup' },
   { to: '/admin/content', icon: '📝', label: 'Content' },
@@ -22,6 +24,12 @@ const NAV = [
 ];
 
 export function AdminLayout() {
+  // robots.txt already disallows the whole /admin path — this is the
+  // belt-and-suspenders layer, so a page never becomes indexable just
+  // because a crawler reached it some other way (an external link, a stale
+  // cache) that skipped robots.txt entirely. Set once here, above every
+  // admin screen, rather than on each one individually.
+  useSeo({ title: 'Admin', noindex: true });
   const { admin, ready, signOut } = useAuth();
   const [theme, setTheme] = useTheme();
 

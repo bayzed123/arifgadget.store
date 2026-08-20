@@ -13,6 +13,7 @@ import {
 } from '../lib/analytics';
 import { Empty, Spinner } from '../components/ui';
 import { OrderSummary, useQuote } from './Cart';
+import { useSeo } from '../lib/seo';
 
 /** Delivery zones, priced from store settings so the shop can change the rates. */
 const ZONES: { key: DeliveryZone; label: string; hint: string }[] = [
@@ -70,6 +71,7 @@ function whatsappMessage(args: {
 }
 
 export function Checkout() {
+  useSeo({ title: 'Checkout', noindex: true });
   const cart = useCart();
   const toast = useToast();
   const navigate = useNavigate();

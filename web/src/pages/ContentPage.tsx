@@ -5,6 +5,7 @@ import { date } from '../lib/format';
 import type { ContentPage as PageData } from '../lib/types';
 import { Prose } from '../components/Prose';
 import { Empty, Spinner } from '../components/ui';
+import { useSeo } from '../lib/seo';
 
 /** Renders any company or policy page from the dashboard-managed CMS. */
 export function ContentPage() {
@@ -22,12 +23,10 @@ export function ContentPage() {
       .catch((err: Error) => setError(err.message));
   }, [slug]);
 
-  useEffect(() => {
-    if (page) document.title = `${page.title} — Arif Gadgets`;
-    return () => {
-      document.title = 'Arif Gadgets — Wholesale Gadgets, Factory Direct';
-    };
-  }, [page]);
+  useSeo({
+    title: page ? page.title : 'Page',
+    description: page?.summary || undefined,
+  });
 
   if (error) return <Empty icon="📄" title="Page not found" hint={error} />;
   if (!page) return <Spinner />;

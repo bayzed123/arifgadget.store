@@ -4,6 +4,7 @@ import { api, mediaUrl } from '../lib/api';
 import { date } from '../lib/format';
 import type { PressItem } from '../lib/types';
 import { Empty, Spinner } from '../components/ui';
+import { useSeo } from '../lib/seo';
 
 /**
  * News coverage. Items are added in the dashboard with a link and a thumbnail
@@ -18,6 +19,8 @@ export function Press() {
       .then((res) => setItems(res.press))
       .catch((err: Error) => setError(err.message));
   }, []);
+
+  useSeo({ title: 'Press & Media', description: 'Where Arif Gadgets has been featured in the press.' });
 
   if (error) return <Empty icon="⚠️" title="Could not load press coverage" hint={error} />;
   if (!items) return <Spinner />;
