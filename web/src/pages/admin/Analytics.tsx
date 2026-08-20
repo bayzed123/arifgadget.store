@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../../lib/api';
-import { number } from '../../lib/format';
+import { number, relativeTime } from '../../lib/format';
 import { useToast } from '../../lib/store';
 import { Empty, Spinner, Stat } from '../../components/ui';
 
@@ -369,6 +369,246 @@ function SearchConsolePanel({ siteUrl, onSiteChosen }: { siteUrl: string; onSite
   );
 }
 
+/* ─────────────────────────── Tag Manager ─────────────────────────── */
+
+interface GtmTag {
+  tagId: string;
+  name: string;
+  type: string;
+  paused: boolean;
+}
+interface GtmTrigger {
+  triggerId: string;
+  name: string;
+  type: string;
+}
+interface GtmSummary {
+  accountName: string;
+  containerName: string;
+  publicId: string;
+  workspaceName: string;
+  tags: GtmTag[];
+  triggers: GtmTrigger[];
+  variables: { variableId: string; name: string; type: string }[];
+  liveVersionName: string | null;
+}
+
+/**
+ * What is actually configured inside the GTM container already installed on
+ * the site — for someone who cannot easily read the GTM console themselves.
+ * GTM itself has no concept of "how often did this fire" (that lives in the
+ * GA4 panel above); this is only "what is set up".
+ */
+function TagManagerPanel() {
+  const [summary, setSummary] = useState<GtmSummary | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api<{ ok: boolean; error: string; summary: GtmSummary | null }>('/api/admin/google/gtm/summary', { auth: true })
+      .then((res) => {
+        setSummary(res.summary);
+        setError(res.ok ? '' : res.error);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load Tag Manager data'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <h3>Tag Manager</h3>
+      </div>
+      <div className="panel-body stack gap-16">
+        {loading ? (
+          <Spinner />
+        ) : error ? (
+          <div className="alert warn small">{error}</div>
+        ) : summary ? (
+          <>
+            <div className="stat-row">
+              <Stat label="Tags" value={number(summary.tags.length)} />
+              <Stat label="Triggers" value={number(summary.triggers.length)} />
+              <Stat label="Variables" value={number(summary.variables.length)} />
+              <Stat label="Live version" value={summary.liveVersionName || 'Not published yet'} />
+            </div>
+            <p className="tiny dim">
+              Container <span className="mono">{summary.publicId}</span> ("{summary.containerName}") in{' '}
+              {summary.accountName} — workspace "{summary.workspaceName}".
+            </p>
+
+            {summary.tags.length === 0 ? (
+              <Empty
+                icon="🏷️"
+                title="No tags set up yet"
+                hint="This container is installed on the site but empty — nothing has been configured inside it. Add tags from tagmanager.google.com whenever you're ready."
+              />
+            ) : (
+              <div className="table-scroll">
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>Tag</th>
+                      <th>Type</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.tags.map((t) => (
+                      <tr key={t.tagId}>
+                        <td>{t.name}</td>
+                        <td className="tiny dim mono">{t.type}</td>
+                        <td>
+                          <span className={`badge ${t.paused ? 'low' : 'ok'}`}>
+                            <span className="dot" /> {t.paused ? 'Paused' : 'Active'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {summary.triggers.length > 0 && (
+              <details>
+                <summary className="small" style={{ cursor: 'pointer', fontWeight: 700 }}>
+                  {summary.triggers.length} trigger{summary.triggers.length === 1 ? '' : 's'}
+                </summary>
+                <ul className="stack gap-4" style={{ marginTop: 8, paddingLeft: 4, listStyle: 'none' }}>
+                  {summary.triggers.map((t) => (
+                    <li key={t.triggerId} className="small between">
+                      <span>{t.name}</span>
+                      <span className="tiny dim mono">{t.type}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Google Sheets ─────────────────────────── */
+
+interface SheetsStatus {
+  spreadsheet_id: string;
+  last_synced_at: number | null;
+  last_error: string;
+}
+
+/**
+ * Pushes real Users/Orders/Revenue data into a spreadsheet the owner shared
+ * with the service account — fully replacing each tab on every run, by hand
+ * here or automatically once an hour from the Worker's own cron trigger.
+ */
+function SheetsPanel() {
+  const toast = useToast();
+  const [status, setStatus] = useState<SheetsStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [url, setUrl] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  function load() {
+    api<SheetsStatus>('/api/admin/google/sheets/status', { auth: true })
+      .then(setStatus)
+      .catch(() => setStatus(null))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function connect(event: FormEvent) {
+    event.preventDefault();
+    if (!url.trim()) return;
+    setConnecting(true);
+    try {
+      await api('/api/admin/google/sheets/connect', { method: 'POST', auth: true, body: { url: url.trim() } });
+      setUrl('');
+      toast('Spreadsheet connected', 'success');
+      load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not connect that spreadsheet', 'error');
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function syncNow() {
+    setSyncing(true);
+    try {
+      const res = await api<{ ok: boolean; error: string }>('/api/admin/google/sheets/sync', { method: 'POST', auth: true });
+      if (res.ok) toast('Spreadsheet updated', 'success');
+      else toast(res.error, 'error');
+      load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Sync failed', 'error');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <h3>Google Sheet export</h3>
+      </div>
+      <div className="panel-body stack gap-14">
+        {loading ? (
+          <Spinner />
+        ) : !status?.spreadsheet_id ? (
+          <form className="stack gap-10" onSubmit={connect}>
+            <p className="small muted">
+              Paste the link to a Google Sheet you've shared with the service account (Editor access). It'll get three
+              tabs — Users, Orders, Revenue — kept fresh automatically every hour.
+            </p>
+            <div className="row gap-8 wrap-row">
+              <input
+                className="input"
+                style={{ flex: 1, minWidth: 260 }}
+                placeholder="https://docs.google.com/spreadsheets/d/..."
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+              />
+              <button className="btn primary" type="submit" disabled={connecting || !url.trim()}>
+                {connecting ? 'Connecting…' : 'Connect'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <div className="row gap-8 wrap-row between">
+              <div>
+                <p className="small">
+                  <a
+                    href={`https://docs.google.com/spreadsheets/d/${status.spreadsheet_id}/edit`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open the spreadsheet ↗
+                  </a>
+                </p>
+                <p className="tiny dim">
+                  {status.last_synced_at ? `Last updated ${relativeTime(status.last_synced_at)}` : 'Never synced yet'} ·
+                  refreshes automatically every hour
+                </p>
+              </div>
+              <button className="btn ghost sm" disabled={syncing} onClick={syncNow}>
+                {syncing ? 'Syncing…' : 'Sync now'}
+              </button>
+            </div>
+            {status.last_error && <div className="alert warn small">Last attempt failed: {status.last_error}</div>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Analytics() {
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
@@ -390,8 +630,8 @@ export function Analytics() {
       <div className="admin-head">
         <div>
           <span className="eyebrow">Marketing</span>
-          <h1>Google Analytics &amp; Search Console</h1>
-          <p className="small muted">Real numbers, read straight from Google — nothing here can change a setting inside either product.</p>
+          <h1>Google Analytics, Tag Manager &amp; Sheets</h1>
+          <p className="small muted">Real data, read and written straight from your connected Google account.</p>
         </div>
       </div>
 
@@ -405,8 +645,10 @@ export function Analytics() {
               needs Viewer access granted inside GA4 and Search Console.
             </p>
           )}
+          <TagManagerPanel />
           <Ga4Panel propertyId={status.ga4_property_id} onPropertyChosen={(id) => setStatus({ ...status, ga4_property_id: id })} />
           <SearchConsolePanel siteUrl={status.gsc_site_url} onSiteChosen={(url) => setStatus({ ...status, gsc_site_url: url })} />
+          <SheetsPanel />
         </div>
       )}
     </>
