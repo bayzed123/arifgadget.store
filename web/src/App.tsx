@@ -21,6 +21,7 @@ import { Settings } from './pages/admin/Settings';
 import { Content } from './pages/admin/Content';
 import { Customers } from './pages/admin/Customers';
 import { Reviews } from './pages/admin/Reviews';
+import { Analytics } from './pages/admin/Analytics';
 import { Guide } from './pages/admin/Guide';
 import { Preview } from './pages/admin/Preview';
 
@@ -59,6 +60,7 @@ export function App() {
                 <Route path="inventory" element={<Inventory />} />
                 <Route path="customers" element={<Customers />} />
                 <Route path="reviews" element={<Reviews />} />
+                <Route path="analytics" element={<Analytics />} />
                 <Route path="content" element={<Content />} />
                 {/* The offer popup deserves its own address — it was too easy to miss as a tab. */}
                 <Route path="offers" element={<Content initialTab="banners" />} />

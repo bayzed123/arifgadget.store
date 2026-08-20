@@ -68,3 +68,23 @@ for (const [name, consequence] of Object.entries(COURIER_SECRETS)) {
     console.log(`${name} not provided — ${consequence}.`);
   }
 }
+
+/**
+ * Google service-account credentials (a full JSON key), for the Analytics
+ * panel to call GA4 and Search Console with real data. Same "absent is fine"
+ * rule as the courier keys: without it the panel reports itself as not
+ * connected instead of the dashboard failing to load.
+ *
+ * The value is the entire downloaded JSON key file, pasted as one repository
+ * secret — never written to a file in this repository, never logged, and
+ * this script only ever reports whether it was set, not what it holds.
+ */
+const value = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
+if (value) {
+  await put('GOOGLE_SERVICE_ACCOUNT_JSON', value);
+  console.log('GOOGLE_SERVICE_ACCOUNT_JSON set from the repository secret.');
+} else if (names.has('GOOGLE_SERVICE_ACCOUNT_JSON')) {
+  console.log('GOOGLE_SERVICE_ACCOUNT_JSON already present on the Worker — left unchanged.');
+} else {
+  console.log('GOOGLE_SERVICE_ACCOUNT_JSON not provided — the Analytics panel reports itself as not connected.');
+}

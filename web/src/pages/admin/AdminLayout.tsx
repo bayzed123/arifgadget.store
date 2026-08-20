@@ -4,6 +4,7 @@ import { Logo } from '../../components/Logo';
 import { Spinner } from '../../components/ui';
 import { Login } from './Login';
 import { ImageZoom } from '../../components/ImageZoom';
+import { NotificationBell } from '../../components/NotificationBell';
 
 const NAV = [
   { to: '/admin', end: true, icon: '📊', label: 'Dashboard' },
@@ -13,6 +14,7 @@ const NAV = [
   { to: '/admin/orders', icon: '🧾', label: 'Orders' },
   { to: '/admin/customers', icon: '👥', label: 'Customers' },
   { to: '/admin/reviews', icon: '⭐', label: 'Ratings' },
+  { to: '/admin/analytics', icon: '📈', label: 'Analytics' },
   { to: '/admin/inventory', icon: '🏷️', label: 'Inventory' },
   { to: '/admin/offers', icon: '📣', label: 'Offers & popup' },
   { to: '/admin/content', icon: '📝', label: 'Content' },
@@ -50,6 +52,8 @@ export function AdminLayout() {
         </NavLink>
 
         <div className="spacer" />
+
+        <NotificationBell />
 
         <NavLink to="/">
           <span aria-hidden="true">🏬</span> View storefront

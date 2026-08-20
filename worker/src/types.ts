@@ -25,6 +25,14 @@ export interface Env {
    * when someone looks rather than the moment they happen.
    */
   STEADFAST_WEBHOOK_TOKEN?: string;
+  /**
+   * A Google Cloud service-account key (the whole downloaded JSON file, as
+   * one string), used to call GA4 and Search Console with real data for the
+   * Analytics panel. The account itself needs Viewer access granted in each
+   * Google product separately — this key only proves who is asking.
+   * Optional: without it the panel reports itself as not connected.
+   */
+  GOOGLE_SERVICE_ACCOUNT_JSON?: string;
 }
 
 export interface AdminClaims {

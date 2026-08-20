@@ -35,6 +35,15 @@ account.use('*', async (c, next) => {
 
   const claims = await currentCustomer(c);
   if (!claims) unauthorized('Sign in to view your account');
+
+  // A block takes effect on the next request, not only at the next sign-in —
+  // otherwise an account blocked mid-session keeps working under its old
+  // token for up to 30 days. Only checked here, not in currentCustomer()
+  // itself: order tracking (orders.ts) uses that for a lighter, optional
+  // "is this the account's own order" check that a block should not disturb.
+  const row = await c.env.DB.prepare('SELECT active FROM customers WHERE id = ?').bind(claims!.sub).first<{ active: number }>();
+  if (!row || row.active === 0) unauthorized('This account has been suspended. Contact support if you believe this is a mistake.');
+
   c.set('customer', claims!);
   return next();
 });
@@ -101,16 +110,19 @@ account.post('/login', async (c) => {
   const password = requireString(body.password, 'password', 200);
 
   const row = await c.env.DB.prepare(
-    'SELECT id, phone, name, password_hash, salt FROM customers WHERE phone = ?',
+    'SELECT id, phone, name, password_hash, salt, active FROM customers WHERE phone = ?',
   )
     .bind(phone)
-    .first<{ id: number; phone: string; name: string; password_hash: string; salt: string }>();
+    .first<{ id: number; phone: string; name: string; password_hash: string; salt: string; active: number }>();
 
   // Hash regardless so timing doesn't reveal which numbers are registered.
   const ok = row
     ? await verifyPassword(password, row.salt, row.password_hash)
     : (await hashPassword(password, randomSalt()), false);
   if (!row || !ok) unauthorized('Wrong number or password');
+  // Checked only after the password is proven right, so a blocked account
+  // reveals nothing extra to someone merely guessing at phone numbers.
+  if (row.active === 0) unauthorized('This account has been suspended. Contact support if you believe this is a mistake.');
 
   await c.env.DB.prepare("UPDATE customers SET last_login_at = strftime('%s','now') WHERE id = ?")
     .bind(row.id)
