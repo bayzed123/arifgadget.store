@@ -87,7 +87,11 @@ export const courierLabel = (status: string): string => COURIER_LABELS[status] ?
  * stock and profit can be right.
  */
 export function checkpointFor(status: string): 'shipped' | 'delivered' | 'refunded' | null {
-  switch (status) {
+  // Steadfast's status-lookup endpoints document lowercase values ("in_review"),
+  // but their webhook's own example payload shows "Delivered" capitalised. Rather
+  // than trust either casing, this is compared case-insensitively so a webhook
+  // event is never silently ignored over a capital letter.
+  switch (status.toLowerCase()) {
     case 'pending':
     case 'in_review':
     case 'hold':
