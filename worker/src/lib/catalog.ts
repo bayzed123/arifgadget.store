@@ -166,6 +166,8 @@ const PUBLIC_SETTING_KEYS = [
   'rocket_number',
   'bank_details',
   'order_whatsapp',
+  /** Uploaded from Settings → Homepage. Empty means "use the bundled default banner". */
+  'hero_banner_url',
 ] as const;
 
 export async function getPublicSettings(env: Env): Promise<StoreSettings & Record<string, string>> {

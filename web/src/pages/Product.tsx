@@ -6,6 +6,7 @@ import { money, number } from '../lib/format';
 import { ProductGallery } from '../components/ProductGallery';
 import { Prose } from '../components/Prose';
 import { ProductCard } from '../components/ProductCard';
+import { ReviewSection } from '../components/ReviewSection';
 import { Empty, Rating, Spinner, StockBadge } from '../components/ui';
 import { setDirectBuy, useCart } from '../lib/store';
 import { trackAddToCart, trackSelectItem, trackViewItem } from '../lib/analytics';
@@ -274,6 +275,8 @@ export function Product() {
           )}
         </aside>
       </div>
+
+      <ReviewSection slug={product.slug} productName={product.name} />
 
       {related.length > 0 && (
         <section style={{ marginTop: 48 }}>

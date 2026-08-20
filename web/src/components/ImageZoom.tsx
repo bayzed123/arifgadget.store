@@ -35,7 +35,7 @@ const ZOOMABLE = [
  * view step through siblings rather than showing a single picture with no way
  * out but closing.
  */
-const GROUPS = '.gallery-grid, .pdp-thumbs, .prod-grid, .prod-rail, .cat-grid, tbody';
+const GROUPS = '.gallery-grid, .pdp-thumbs, .prod-grid, .prod-rail, tbody';
 
 /** Long enough that sweeping the mouse across a grid does not flash previews. */
 const HOVER_DELAY_MS = 320;
