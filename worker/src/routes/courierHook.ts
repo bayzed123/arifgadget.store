@@ -10,21 +10,22 @@
  * parcel is delivered or comes back, so the shopper checking their order sees
  * the truth without waiting for anyone to press anything.
  *
- * **Authentication is the URL itself.** The endpoint carries a secret path
- * segment that must match STEADFAST_WEBHOOK_TOKEN, and the whole route 404s —
- * not 401s — when it does not. A scanner walking the API learns nothing about
- * whether a webhook exists, and Steadfast needs no support for custom headers
- * for this to be safe. Use a long random token; it is a password living in a
- * URL.
+ * **How Steadfast actually authenticates this**, per their own webhook
+ * documentation: their merchant portal has two fields when you set this up —
+ * a *Callback Url* and an *Auth Token (Bearer)*. The token is not part of the
+ * URL; it comes back on every call as `Authorization: Bearer <token>`. So the
+ * URL here is fixed and unremarkable, and the secret lives in the header,
+ * matched against STEADFAST_WEBHOOK_TOKEN. An unconfigured or mismatched
+ * token 404s rather than 401s — a scanner walking the API learns nothing
+ * about whether a webhook exists here at all.
  *
- * The payload is read defensively. Couriers rename fields between versions, so
- * every value is looked for under the handful of names it plausibly arrives
- * as, and a shape that carries nothing recognisable is answered 200 with a
- * note rather than an error — a webhook endpoint that returns failures gets
- * disabled by the sender.
+ * The payload matches Steadfast's documented shape exactly — two notification
+ * types, `delivery_status` and `tracking_update` — with the older
+ * guessed-at-alternatives kept as a fallback in case a real payload ever
+ * differs from the docs.
  */
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env, Variables } from '../types';
 import { recordCourierStatus, type CourierOrderRow } from '../lib/courierSync';
 
@@ -40,25 +41,47 @@ function pick(body: Record<string, unknown>, ...names: string[]): string {
   return '';
 }
 
-courierHook.post('/steadfast/:token', async (c) => {
+/**
+ * The fixed path Steadfast's portal calls "Callback Url". Also accepted at the
+ * old `/steadfast/:token` shape some earlier setup may have used — both check
+ * the same secret, so nothing that was already configured needs re-entering.
+ */
+async function handle(c: Context<{ Bindings: Env; Variables: Variables }>) {
   const expected = c.env.STEADFAST_WEBHOOK_TOKEN?.trim();
-  // Unconfigured and wrong-token look identical from outside.
-  if (!expected || c.req.param('token') !== expected) return c.notFound();
+  if (!expected) return c.notFound();
+
+  const auth = c.req.header('Authorization') ?? '';
+  const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  const pathToken = c.req.param('token'); // present only on the /steadfast/:token variant
+  // Unconfigured, wrong header, and wrong path token all look identical from
+  // outside — 404, never 401, so nothing here confirms a webhook exists.
+  if (bearer !== expected && pathToken !== expected) return c.notFound();
 
   let body: Record<string, unknown>;
   try {
     body = (await c.req.json()) as Record<string, unknown>;
   } catch {
-    return c.json({ ok: true, note: 'Body was not JSON — nothing to apply.' });
+    return c.json({ status: 'success', message: 'Webhook received successfully.', ok: true, note: 'Body was not JSON — nothing to apply.' });
   }
 
-  // Steadfast has used both `status` and `delivery_status` across versions.
-  const status = pick(body, 'delivery_status', 'status');
+  const notificationType = pick(body, 'notification_type');
   const consignmentId = pick(body, 'consignment_id', 'consignmentId', 'cid');
   const invoice = pick(body, 'invoice', 'invoice_id', 'order_no');
 
+  // A tracking_update carries a human-readable message but no delivery
+  // status — nothing here justifies moving an order's checkpoint. Steadfast
+  // still expects a 200, so it is acknowledged rather than ignored.
+  if (notificationType === 'tracking_update') {
+    return c.json({ status: 'success', message: 'Webhook received successfully.', ok: true, note: 'Tracking update noted; no status to apply.' });
+  }
+
+  // delivery_status is the documented type for anything that should move an
+  // order, but the field is read regardless of notification_type in case a
+  // future Steadfast payload carries a status without labelling itself.
+  const status = pick(body, 'status', 'delivery_status');
+
   if (!status || (!consignmentId && !invoice)) {
-    return c.json({ ok: true, note: 'No status or identifier recognised in the payload.' });
+    return c.json({ status: 'success', message: 'Webhook received successfully.', ok: true, note: 'No status or identifier recognised in the payload.' });
   }
 
   // Matched on the courier's own id first: an invoice is the shop's number and
@@ -73,8 +96,18 @@ courierHook.post('/steadfast/:token', async (c) => {
 
   // An unknown parcel is not an error worth retrying — it is almost always a
   // consignment booked outside this shop, or one whose order has been deleted.
-  if (!order) return c.json({ ok: true, note: 'No matching order.' });
+  if (!order) return c.json({ status: 'success', message: 'Webhook received successfully.', ok: true, note: 'No matching order.' });
 
   const result = await recordCourierStatus(c.env, order, status, 'steadfast-webhook');
-  return c.json({ ok: true, order_no: result.order_no, applied: status, moved_to: result.moved_to ?? null });
-});
+  return c.json({
+    status: 'success',
+    message: 'Webhook received successfully.',
+    ok: true,
+    order_no: result.order_no,
+    applied: status,
+    moved_to: result.moved_to ?? null,
+  });
+}
+
+courierHook.post('/steadfast', handle);
+courierHook.post('/steadfast/:token', handle);

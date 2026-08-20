@@ -94,6 +94,12 @@ export async function recordCourierStatus(
   courierStatus: string,
   actor: string,
 ): Promise<SyncResult> {
+  // The status-lookup endpoints document lowercase values; Steadfast's own
+  // webhook example shows "Delivered" capitalised. Stored lowercase so every
+  // reader — the label lookup, the checkpoint table, the dashboard — sees one
+  // consistent value regardless of which casing this particular call arrived in.
+  courierStatus = courierStatus.trim().toLowerCase();
+
   await env.DB.prepare(
     "UPDATE orders SET courier_status = ?, courier_synced_at = strftime('%s','now') WHERE id = ?",
   )

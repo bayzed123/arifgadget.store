@@ -87,7 +87,11 @@ export const courierLabel = (status: string): string => COURIER_LABELS[status] ?
  * stock and profit can be right.
  */
 export function checkpointFor(status: string): 'shipped' | 'delivered' | 'refunded' | null {
-  switch (status) {
+  // Steadfast's status-lookup endpoints document lowercase values ("in_review"),
+  // but their webhook's own example payload shows "Delivered" capitalised. Rather
+  // than trust either casing, this is compared case-insensitively so a webhook
+  // event is never silently ignored over a capital letter.
+  switch (status.toLowerCase()) {
     case 'pending':
     case 'in_review':
     case 'hold':
@@ -177,12 +181,30 @@ async function call<T>(env: Env, path: string, init?: { method: string; body: un
     try {
       payload = text ? JSON.parse(text) : null;
     } catch {
-      // A courier portal in maintenance answers with an HTML page. Say so
-      // plainly rather than pasting markup into the dashboard.
+      // Steadfast's documented responses are all JSON, so a non-JSON body is
+      // something in front of their application answering instead — most
+      // often their own Cloudflare edge issuing a bot-challenge page, or a
+      // plain-text/HTML 401 view for a request their auth middleware never
+      // accepted. "Not JSON" alone gave no way to tell those apart, so a
+      // short, tag-stripped snippet of the actual body goes into the error —
+      // seeing the words "Just a moment" or "Attention Required" is the
+      // difference between chasing the wrong fix and the right one.
+      const snippet = text
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
+      const looksLikeChallenge = /just a moment|attention required|cf-browser-verification|checking your browser/i.test(
+        text,
+      );
       return {
         ok: false,
         status: res.status,
-        error: `Steadfast replied with ${res.status} and something that was not JSON.`,
+        error: looksLikeChallenge
+          ? `Steadfast's own Cloudflare protection blocked this request with a ${res.status} challenge page, before it reached their API at all.`
+          : snippet
+            ? `Steadfast replied with ${res.status} and this instead of JSON: "${snippet}${text.length > 160 ? '…' : ''}"`
+            : `Steadfast replied with ${res.status} and an empty body.`,
       };
     }
 
