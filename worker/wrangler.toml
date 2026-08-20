@@ -14,6 +14,12 @@ workers_dev = true
 [observability]
 enabled = true
 
+# Keeps the connected Google Sheet current without anyone having to remember
+# to press "Sync now". Runs whether or not a sheet is actually connected yet —
+# runSheetsSync() is a cheap no-op ("no sheet connected") until one is.
+[triggers]
+crons = ["0 * * * *"]
+
 # `database_id` is filled in by scripts/bootstrap-cf.mjs during deploy, which
 # creates the database on first run and reuses it afterwards.
 [[d1_databases]]

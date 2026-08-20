@@ -30,6 +30,9 @@ import { encryptSecret } from '../lib/crypto';
 import { googleConfigured, googleServiceAccountEmail } from '../lib/googleAuth';
 import { ga4Summary, listGa4Properties } from '../lib/googleAnalytics';
 import { listSearchConsoleSites, searchConsoleSummary } from '../lib/searchConsole';
+import { gtmSummary } from '../lib/googleTagManager';
+import { parseSpreadsheetId } from '../lib/googleSheets';
+import { runSheetsSync } from '../lib/sheetsSync';
 import { ORDER_STATUSES, STATUS_ALIASES, NEXT_STATUSES, label } from '../lib/checkpoints';
 import {
   applyCourierCheckpoint,
@@ -1469,6 +1472,17 @@ admin.get('/google/gsc/sites', async (c) => {
   return c.json({ ok: true, error: '', sites: result.data });
 });
 
+// The public container ID pasted into web/index.html's own GTM snippet —
+// fixed to the one container this site actually runs, not user-selectable,
+// since there is only ever one right answer for "the container on our site".
+const GTM_PUBLIC_ID = 'GTM-MGQ6S4HX';
+
+admin.get('/google/gtm/summary', async (c) => {
+  const result = await gtmSummary(c.env, GTM_PUBLIC_ID);
+  if (!result.ok) return c.json({ ok: false, error: result.error, summary: null });
+  return c.json({ ok: true, error: '', summary: result.data });
+});
+
 admin.get('/google/gsc/summary', async (c) => {
   const site = await settingValue(c.env, 'gsc_site_url');
   if (!site) {
@@ -1478,4 +1492,42 @@ admin.get('/google/gsc/summary', async (c) => {
   const result = await searchConsoleSummary(c.env, site, days);
   if (!result.ok) return c.json({ ok: false, error: result.error, summary: null });
   return c.json({ ok: true, error: '', summary: result.data });
+});
+
+admin.get('/google/sheets/status', async (c) => {
+  const [id, syncedAt, lastError] = await Promise.all([
+    settingValue(c.env, 'sheets_spreadsheet_id'),
+    settingValue(c.env, 'sheets_last_synced_at'),
+    settingValue(c.env, 'sheets_last_error'),
+  ]);
+  return c.json({
+    spreadsheet_id: id ? parseSpreadsheetId(id) : '',
+    last_synced_at: syncedAt ? Number(syncedAt) : null,
+    last_error: lastError,
+  });
+});
+
+/** Saves which spreadsheet to sync into. Accepts either the full URL or a bare ID — whatever was pasted. */
+admin.post('/google/sheets/connect', async (c) => {
+  requireOwner(c);
+  const body = await readJson(c);
+  const url = requireString(body.url, 'url', 300);
+  const id = parseSpreadsheetId(url);
+  if (!id) badRequest('That does not look like a Google Sheets link or ID.');
+
+  await c.env.DB.prepare(
+    `INSERT INTO settings (key, value, updated_at) VALUES ('sheets_spreadsheet_id', ?, strftime('%s','now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+  )
+    .bind(id!)
+    .run();
+
+  await audit(c.env, c.get('admin').username, 'sheets.connect', 'settings', '', `Connected spreadsheet ${id}`);
+  return c.json({ ok: true, spreadsheet_id: id });
+});
+
+/** Runs the sync immediately, rather than waiting for the hourly cron. */
+admin.post('/google/sheets/sync', async (c) => {
+  const result = await runSheetsSync(c.env);
+  return c.json(result);
 });

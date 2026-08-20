@@ -12,6 +12,7 @@ import { adminContent } from './routes/adminContent';
 import { account } from './routes/account';
 import { courierHook } from './routes/courierHook';
 import { reviews } from './routes/reviews';
+import { runSheetsSync } from './lib/sheetsSync';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -84,4 +85,15 @@ app.onError((err, c) => {
   return c.json({ error: 'Something went wrong on our side. Please try again.' }, 500);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  /**
+   * Fired hourly by the [triggers] cron in wrangler.toml — keeps the owner's
+   * connected Google Sheet current without anyone pressing "Sync now". A
+   * no-op, cheaply, until a sheet is actually connected: runSheetsSync()
+   * checks for one itself and returns early if there isn't.
+   */
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runSheetsSync(env).catch(() => undefined));
+  },
+};
