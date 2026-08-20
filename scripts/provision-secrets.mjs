@@ -88,3 +88,28 @@ if (value) {
 } else {
   console.log('GOOGLE_SERVICE_ACCOUNT_JSON not provided — the Analytics panel reports itself as not connected.');
 }
+
+/**
+ * Gemini API keys — three separate ones, each scoped to one feature, so a
+ * problem or a quota limit on one (a public, unauthenticated chat) can never
+ * take down another (the owner's own admin assistant). Same "absent is fine"
+ * rule as everything else here: without a key that one feature reports
+ * itself as not configured rather than the dashboard breaking.
+ */
+const GEMINI_SECRETS = {
+  ADMIN_GEMINI_API_KEY: 'the admin assistant reports itself as not configured',
+  SUPPORT_GEMINI_API_KEY: 'the storefront support chat reports itself as not configured',
+  ALERT_GEMINI_API_KEY: 'the daily site health check does not run',
+};
+
+for (const [name, consequence] of Object.entries(GEMINI_SECRETS)) {
+  const value = process.env[name]?.trim();
+  if (value) {
+    await put(name, value);
+    console.log(`${name} set from the repository secret.`);
+  } else if (names.has(name)) {
+    console.log(`${name} already present on the Worker — left unchanged.`);
+  } else {
+    console.log(`${name} not provided — ${consequence}.`);
+  }
+}

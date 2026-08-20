@@ -5,6 +5,7 @@ import { Spinner } from '../../components/ui';
 import { Login } from './Login';
 import { ImageZoom } from '../../components/ImageZoom';
 import { NotificationBell } from '../../components/NotificationBell';
+import { AdminAssistant } from '../../components/AdminAssistant';
 import { useSeo } from '../../lib/seo';
 
 const NAV = [
@@ -96,6 +97,10 @@ export function AdminLayout() {
 
       {/* Hover any picture to see it enlarged; click one to open it full screen. */}
       <ImageZoom />
+
+      {/* Available on every admin screen — see AdminAssistant.tsx. Hides
+          itself if ADMIN_GEMINI_API_KEY was never configured. */}
+      <AdminAssistant />
     </div>
   );
 }

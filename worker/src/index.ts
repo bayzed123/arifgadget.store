@@ -12,7 +12,11 @@ import { adminContent } from './routes/adminContent';
 import { account } from './routes/account';
 import { courierHook } from './routes/courierHook';
 import { reviews } from './routes/reviews';
+import { support } from './routes/support';
 import { runSheetsSync } from './lib/sheetsSync';
+import { runHealthCheck } from './lib/healthCheck';
+
+const DAILY_HEALTH_CHECK_CRON = '0 2 * * *';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -65,6 +69,7 @@ app.route('/api', catalog);
 app.route('/api', orders);
 app.route('/api', content);
 app.route('/api', reviews);
+app.route('/api/support', support);
 app.route('/api/account', account);
 // Courier callbacks. Authenticated by a secret path segment, not a session,
 // because the caller is Steadfast rather than a person.
@@ -88,12 +93,17 @@ app.onError((err, c) => {
 export default {
   fetch: app.fetch,
   /**
-   * Fired hourly by the [triggers] cron in wrangler.toml — keeps the owner's
-   * connected Google Sheet current without anyone pressing "Sync now". A
-   * no-op, cheaply, until a sheet is actually connected: runSheetsSync()
-   * checks for one itself and returns early if there isn't.
+   * Fired by the two [triggers] crons in wrangler.toml. The daily one runs
+   * the Gemini site health check; every other firing (the hourly one) syncs
+   * the owner's connected Google Sheet — both are cheap no-ops until their
+   * respective feature is actually configured, so this never needs to check
+   * that itself.
    */
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === DAILY_HEALTH_CHECK_CRON) {
+      ctx.waitUntil(runHealthCheck(env).catch(() => undefined));
+      return;
+    }
     ctx.waitUntil(runSheetsSync(env).catch(() => undefined));
   },
 };

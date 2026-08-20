@@ -40,6 +40,10 @@ const LABELS: Record<string, { label: string; hint: string }> = {
   shipping_outside: { label: 'Delivery outside Dhaka (৳)', hint: 'Charged everywhere else in Bangladesh' },
   free_shipping_over: { label: 'Free delivery over (৳)', hint: 'Order value that unlocks free delivery' },
   tax_pct: { label: 'Tax percentage', hint: 'Applied to the net order value. 0 disables it.' },
+  site_url: {
+    label: 'Live storefront URL',
+    hint: 'e.g. https://arifgadget.store — used by the daily site health check to confirm the live site is actually up',
+  },
 };
 
 /**

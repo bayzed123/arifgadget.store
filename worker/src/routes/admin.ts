@@ -33,6 +33,11 @@ import { listSearchConsoleSites, searchConsoleSummary } from '../lib/searchConso
 import { gtmSummary } from '../lib/googleTagManager';
 import { parseSpreadsheetId } from '../lib/googleSheets';
 import { runSheetsSync } from '../lib/sheetsSync';
+import { adminAssistantConfigured, adminAssistantReply } from '../lib/adminAssistant';
+import type { GeminiTurn } from '../lib/gemini';
+import { geminiConfigured } from '../lib/gemini';
+import { supportAssistantConfigured } from '../lib/supportAssistant';
+import { runHealthCheck } from '../lib/healthCheck';
 import { ORDER_STATUSES, STATUS_ALIASES, NEXT_STATUSES, label } from '../lib/checkpoints';
 import {
   applyCourierCheckpoint,
@@ -1398,7 +1403,7 @@ interface Notification {
 }
 
 admin.get('/notifications', async (c) => {
-  const [pending, lowStock, outOfStock, lowRatings] = await Promise.all([
+  const [pending, lowStock, outOfStock, lowRatings, healthStatus, healthCheckedAt] = await Promise.all([
     c.env.DB.prepare("SELECT COUNT(*) AS n FROM orders WHERE status = 'pending'").first<{ n: number }>(),
     c.env.DB.prepare("SELECT COUNT(*) AS n FROM products WHERE status = 'active' AND stock_state = 'low'").first<{
       n: number;
@@ -1411,6 +1416,8 @@ admin.get('/notifications', async (c) => {
         "SELECT COUNT(*) AS n FROM reviews WHERE visible = 1 AND rating <= 2 AND created_at >= strftime('%s','now','-14 days')",
       )
       .first<{ n: number }>(),
+    settingValue(c.env, 'site_health_status'),
+    settingValue(c.env, 'site_health_checked_at'),
   ]);
 
   const items: Notification[] = [];
@@ -1422,6 +1429,21 @@ admin.get('/notifications', async (c) => {
   push(outOfStock?.n, 'out_of_stock', (n) => `${n} product${n === 1 ? '' : 's'} out of stock`, '/admin/inventory');
   push(lowStock?.n, 'low_stock', (n) => `${n} product${n === 1 ? '' : 's'} running low`, '/admin/inventory');
   push(lowRatings?.n, 'low_ratings', (n) => `${n} low rating${n === 1 ? '' : 's'} in the last 2 weeks`, '/admin/reviews');
+
+  // The daily Gemini health check, surfaced here only while its verdict is
+  // both recent (36h — a bit over a day, so one slow cron firing doesn't
+  // drop it early) and not "ok" — a clean report is not something to
+  // interrupt anyone about.
+  const checkedAt = healthCheckedAt ? Number(healthCheckedAt) : 0;
+  const fresh = checkedAt > 0 && Date.now() / 1000 - checkedAt < 36 * 3600;
+  if (fresh && (healthStatus === 'warning' || healthStatus === 'error')) {
+    items.push({
+      kind: 'site_health',
+      count: 1,
+      label: healthStatus === 'error' ? 'Daily health check found something broken' : 'Daily health check has a note',
+      href: '/admin/settings',
+    });
+  }
 
   return c.json({ items, total: items.reduce((sum, i) => sum + i.count, 0) });
 });
@@ -1529,5 +1551,76 @@ admin.post('/google/sheets/connect', async (c) => {
 /** Runs the sync immediately, rather than waiting for the hourly cron. */
 admin.post('/google/sheets/sync', async (c) => {
   const result = await runSheetsSync(c.env);
+  return c.json(result);
+});
+
+/* ══════════════════════════ Admin assistant (Gemini) ══════════════════════════
+ *
+ * A chat helper for staff, built into the dashboard — see adminAssistant.ts
+ * for how it's grounded (a written knowledge block plus a live D1 snapshot
+ * pulled fresh on every request). Nothing here is stored: each request
+ * carries the whole conversation so far, and the Worker holds none of it.
+ */
+
+admin.get('/assistant/status', async (c) => {
+  return c.json({ connected: adminAssistantConfigured(c.env) });
+});
+
+admin.post('/assistant/chat', async (c) => {
+  if (!adminAssistantConfigured(c.env)) {
+    return c.json({ ok: false, error: 'ADMIN_GEMINI_API_KEY is not set — ask the developer to add it.', reply: '' });
+  }
+  const body = await readJson(c);
+  const historyRaw = Array.isArray(body.history) ? body.history : [];
+  const history: GeminiTurn[] = historyRaw
+    .filter((t: unknown): t is { role: string; text: string } => {
+      const turn = t as { role?: unknown; text?: unknown };
+      return (turn.role === 'user' || turn.role === 'model') && typeof turn.text === 'string' && turn.text.trim().length > 0;
+    })
+    .map((t) => ({ role: t.role as 'user' | 'model', text: String(t.text).slice(0, 4000) }));
+
+  if (history.length === 0 || history[history.length - 1].role !== 'user') {
+    badRequest('Send "history": an array of {role,text} turns ending with a user message.');
+  }
+
+  const result = await adminAssistantReply(c.env, history);
+  if (!result.ok) return c.json({ ok: false, error: result.error, reply: '' });
+  return c.json({ ok: true, error: '', reply: result.data });
+});
+
+/* ══════════════════════════ Site health check (Gemini) ══════════════════════════
+ *
+ * Runs automatically once a day from the Worker's cron (see index.ts); this
+ * section is just: a status line for Settings to show which of the three
+ * Gemini features are configured, the latest health-check result, and a
+ * "Run now" button rather than waiting for tomorrow's cron.
+ */
+
+admin.get('/gemini/status', async (c) => {
+  return c.json({
+    admin_assistant: geminiConfigured(c.env, 'ADMIN_GEMINI_API_KEY'),
+    support_chat: supportAssistantConfigured(c.env),
+    site_health_check: geminiConfigured(c.env, 'ALERT_GEMINI_API_KEY'),
+  });
+});
+
+admin.get('/health-check/status', async (c) => {
+  const [status, summary, checkedAt, error] = await Promise.all([
+    settingValue(c.env, 'site_health_status'),
+    settingValue(c.env, 'site_health_summary'),
+    settingValue(c.env, 'site_health_checked_at'),
+    settingValue(c.env, 'site_health_error'),
+  ]);
+  return c.json({
+    status: status || null,
+    summary,
+    checked_at: checkedAt ? Number(checkedAt) : null,
+    error,
+  });
+});
+
+/** Runs the check immediately, rather than waiting for tomorrow's cron. */
+admin.post('/health-check/run', async (c) => {
+  const result = await runHealthCheck(c.env);
   return c.json(result);
 });

@@ -609,6 +609,122 @@ function SheetsPanel() {
   );
 }
 
+/* ─────────────────────────── AI assistants & health check ─────────────────────────── */
+
+interface GeminiStatus {
+  admin_assistant: boolean;
+  support_chat: boolean;
+  site_health_check: boolean;
+}
+
+interface HealthStatus {
+  status: 'ok' | 'warning' | 'error' | null;
+  summary: string;
+  checked_at: number | null;
+  error: string;
+}
+
+/**
+ * Three independent Gemini-powered features (see gemini.ts on the Worker for
+ * why the keys are kept separate): the admin assistant floating on every
+ * dashboard screen, the storefront's support chat, and this — a health check
+ * that runs once a day on its own and only needs checking in on here.
+ */
+function HealthCheckPanel() {
+  const toast = useToast();
+  const [gemini, setGemini] = useState<GeminiStatus | null>(null);
+  const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+
+  function load() {
+    setLoading(true);
+    Promise.all([
+      api<GeminiStatus>('/api/admin/gemini/status', { auth: true }),
+      api<HealthStatus>('/api/admin/health-check/status', { auth: true }),
+    ])
+      .then(([g, h]) => {
+        setGemini(g);
+        setHealth(h);
+      })
+      .catch(() => undefined)
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function runNow() {
+    setRunning(true);
+    try {
+      const res = await api<{ ok: boolean; error: string }>('/api/admin/health-check/run', { method: 'POST', auth: true });
+      if (res.ok) toast('Health check complete', 'success');
+      else toast(res.error, 'error');
+      load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not run the check', 'error');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const alertClass = health?.status === 'ok' ? 'success' : health?.status === 'error' ? 'error' : 'warn';
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>AI assistants &amp; daily health check</h3>
+          <p className="tiny dim">Powered by Gemini — three separate API keys, one per feature.</p>
+        </div>
+        {gemini?.site_health_check && (
+          <button className="btn ghost sm" disabled={running} onClick={runNow}>
+            {running ? 'Checking…' : 'Run now'}
+          </button>
+        )}
+      </div>
+      <div className="panel-body stack gap-14">
+        {loading ? (
+          <Spinner />
+        ) : (
+          <>
+            <div className="stat-row">
+              <Stat label="Admin assistant" value={gemini?.admin_assistant ? 'Configured' : 'Not set'} foot="Floating helper on every admin screen" />
+              <Stat label="Support chat" value={gemini?.support_chat ? 'Configured' : 'Not set'} foot="Floating chat on the storefront" />
+              <Stat label="Daily health check" value={gemini?.site_health_check ? 'Configured' : 'Not set'} foot="Runs once a day automatically" />
+            </div>
+
+            {!gemini?.site_health_check ? (
+              <div className="alert warn small">
+                Add <code>ALERT_GEMINI_API_KEY</code> as a repository secret and re-run the deploy to turn the daily
+                check on. (<code>ADMIN_GEMINI_API_KEY</code> and <code>SUPPORT_GEMINI_API_KEY</code> switch on the
+                two chat widgets the same way.)
+              </div>
+            ) : health?.error ? (
+              <div className="alert warn small">Last attempt failed: {health.error}</div>
+            ) : health?.status ? (
+              <div className={`alert ${alertClass} small`} style={{ whiteSpace: 'pre-wrap' }}>
+                {health.summary}
+                <div className="tiny dim" style={{ marginTop: 8 }}>
+                  {health.checked_at ? `Checked ${relativeTime(health.checked_at)}` : ''}
+                </div>
+              </div>
+            ) : (
+              <Empty icon="🩺" title="Hasn't run yet" hint="Runs automatically once a day — or press Run now above." />
+            )}
+
+            {gemini?.site_health_check && !health?.status && (
+              <p className="tiny dim">
+                Add the <strong>Live storefront URL</strong> in Settings so the check can also confirm the live site
+                itself is reachable, not just the dashboard's own numbers.
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Analytics() {
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
@@ -633,6 +749,10 @@ export function Analytics() {
           <h1>Google Analytics, Tag Manager &amp; Sheets</h1>
           <p className="small muted">Real data, read and written straight from your connected Google account.</p>
         </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <HealthCheckPanel />
       </div>
 
       {!status?.connected ? (

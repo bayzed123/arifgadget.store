@@ -33,6 +33,17 @@ export interface Env {
    * Optional: without it the panel reports itself as not connected.
    */
   GOOGLE_SERVICE_ACCOUNT_JSON?: string;
+  /**
+   * Three separate Gemini API keys, one per feature, kept apart on purpose:
+   * a public, unauthenticated chat (support) can burn through its own quota
+   * without ever touching the key the owner's private admin assistant runs
+   * on, and the daily health check runs on a third again — one feature
+   * misbehaving never disables another. Each is optional; without it that
+   * one feature reports itself as not configured.
+   */
+  ADMIN_GEMINI_API_KEY?: string;
+  SUPPORT_GEMINI_API_KEY?: string;
+  ALERT_GEMINI_API_KEY?: string;
 }
 
 export interface AdminClaims {

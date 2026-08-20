@@ -48,6 +48,10 @@ export function Invoice() {
   const { orderNo = '' } = useParams();
   const [params] = useSearchParams();
   const phone = params.get('phone') ?? '';
+  // Set by the admin dashboard's "Print invoice" button, so handing a parcel
+  // over is one click — open the tab, print dialog is already up — instead of
+  // load, find the print button, then click it.
+  const autoPrint = params.get('print') === '1';
 
   const [data, setData] = useState<{ order: InvoiceOrder; items: InvoiceItem[] } | null>(null);
   const [settings, setSettings] = useState<StoreSettings | null>(null);
@@ -66,6 +70,13 @@ export function Invoice() {
 
     api<StoreSettings>('/api/settings').then(setSettings).catch(() => setSettings(null));
   }, [orderNo, phone]);
+
+  useEffect(() => {
+    if (autoPrint && data) {
+      const t = setTimeout(() => window.print(), 250);
+      return () => clearTimeout(t);
+    }
+  }, [autoPrint, data]);
 
   if (error) {
     return (

@@ -84,6 +84,13 @@ jobs:
           # secret. Optional: unset leaves the Analytics panel reporting itself
           # as not connected, same as an unset courier key.
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          # Three separate Gemini API keys, one per feature — see
+          # provision-secrets.mjs for why they're kept separate. Each is
+          # optional on its own; unset just leaves that one feature reporting
+          # itself as not configured.
+          ADMIN_GEMINI_API_KEY: ${{ secrets.ADMIN_GEMINI_API_KEY }}
+          SUPPORT_GEMINI_API_KEY: ${{ secrets.SUPPORT_GEMINI_API_KEY }}
+          ALERT_GEMINI_API_KEY: ${{ secrets.ALERT_GEMINI_API_KEY }}
         run: node scripts/provision-secrets.mjs
 
       - name: Provision the dashboard owner

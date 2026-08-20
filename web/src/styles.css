@@ -1263,6 +1263,43 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   .wa-fab:hover { transform: none; }
 }
 
+/* The storefront support-chat launcher — same treatment as .wa-fab, mirrored
+   to the left edge so the two floating buttons never overlap at any width. */
+.support-fab {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 90;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px 13px 15px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--brand, #d97528);
+  color: #0a101e;
+  font-weight: 800;
+  font-size: 0.92rem;
+  cursor: pointer;
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--brand, #d97528) 42%, transparent), 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.support-fab:hover { transform: translateY(-2px); }
+.support-fab:active { transform: translateY(0); }
+
+@media (max-width: 640px) {
+  .support-fab { padding: 14px; left: 14px; bottom: 14px; }
+  .support-fab-text { display: none; }
+}
+
+@media (max-width: 900px) {
+  .support-fab { bottom: 76px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .support-fab:hover { transform: none; }
+}
+
 /* ============================================================ contact block */
 
 .contact-list { display: grid; gap: 9px; font-size: 0.87rem; }
@@ -1824,7 +1861,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 }
 
 @media print {
-  .header, .catnav, .footer, .bottom-nav, .wa-fab,
+  .header, .catnav, .footer, .bottom-nav, .wa-fab, .support-fab,
   .invoice-actions, .offer-backdrop, .drawer-root { display: none !important; }
   body { background: #fff; }
   .page { padding: 0; }
