@@ -13,8 +13,7 @@
  *     not look like customer behaviour.
  */
 
-export const GA_MEASUREMENT_ID = 'G-54HYSJY06E';
-export const GA_STREAM_ID = '15447820887';
+export const GA_MEASUREMENT_ID = 'G-0NMRBW4SEG';
 
 const CURRENCY = 'BDT';
 
