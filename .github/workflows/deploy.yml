@@ -80,6 +80,10 @@ jobs:
           # instead, which works — updates just arrive on refresh, not instantly.
           # Same either-spelling reasoning as the pair above.
           STEADFAST_WEBHOOK_TOKEN: ${{ secrets.STEADFAST_WEBHOOK_TOKEN || secrets.STEAT_FAST_WEBHOOK_TOKEN }}
+          # The Google service-account JSON key, pasted whole as one repository
+          # secret. Optional: unset leaves the Analytics panel reporting itself
+          # as not connected, same as an unset courier key.
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: node scripts/provision-secrets.mjs
 
       - name: Provision the dashboard owner

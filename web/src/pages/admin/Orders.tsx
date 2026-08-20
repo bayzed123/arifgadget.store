@@ -43,7 +43,13 @@ interface Page {
 export function Orders() {
   const toast = useToast();
   const [data, setData] = useState<Page | null>(null);
-  const [status, setStatus] = useState('all');
+  // Seeded from ?status= once on mount, so a link from the notification bell
+  // ("3 orders waiting to be confirmed") lands on the filtered tab directly
+  // instead of the unfiltered "All" view.
+  const [status, setStatus] = useState(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('status');
+    return fromUrl && STATUSES.includes(fromUrl) ? fromUrl : 'all';
+  });
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);

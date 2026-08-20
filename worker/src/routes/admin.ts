@@ -27,6 +27,9 @@ import {
   credentialShape,
 } from '../lib/steadfast';
 import { encryptSecret } from '../lib/crypto';
+import { googleConfigured, googleServiceAccountEmail } from '../lib/googleAuth';
+import { ga4Summary, listGa4Properties } from '../lib/googleAnalytics';
+import { listSearchConsoleSites, searchConsoleSummary } from '../lib/searchConsole';
 import { ORDER_STATUSES, STATUS_ALIASES, NEXT_STATUSES, label } from '../lib/checkpoints';
 import {
   applyCourierCheckpoint,
@@ -840,7 +843,7 @@ admin.get('/customers', async (c) => {
     .first<{ n: number }>();
 
   const { results } = await c.env.DB.prepare(
-    `SELECT c.id, c.name, c.phone, c.email, c.address, c.city, c.created_at, c.last_login_at,
+    `SELECT c.id, c.name, c.phone, c.email, c.address, c.city, c.created_at, c.last_login_at, c.active,
             (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id) AS orders,
             (SELECT COALESCE(SUM(o.total),0) FROM orders o
               WHERE o.customer_id = c.id AND o.counts_as_sale = 1) AS spent,
@@ -859,7 +862,7 @@ admin.get('/customers', async (c) => {
 admin.get('/customers/:id', async (c) => {
   const id = Number(c.req.param('id'));
   const customer = await c.env.DB.prepare(
-    `SELECT id, name, phone, email, address, city, created_at, last_login_at
+    `SELECT id, name, phone, email, address, city, created_at, last_login_at, active
        FROM customers WHERE id = ?`,
   )
     .bind(id)
@@ -876,6 +879,38 @@ admin.get('/customers/:id', async (c) => {
     .all();
 
   return c.json({ customer, orders: results ?? [] });
+});
+
+/**
+ * Blocks or restores a customer account. Blocking never deletes anything —
+ * the account and every order it placed stay exactly as they are; a blocked
+ * customer just can no longer sign in or use an existing session (enforced
+ * in account.ts on every /api/account/* request, not only at login).
+ */
+admin.patch('/customers/:id', async (c) => {
+  requireOwner(c);
+  const id = Number(c.req.param('id'));
+  const body = await readJson(c);
+  if (body.active === undefined) badRequest('Provide "active"');
+
+  const existing = await c.env.DB.prepare('SELECT id, name FROM customers WHERE id = ?')
+    .bind(id)
+    .first<{ id: number; name: string }>();
+  if (!existing) notFound('Customer not found');
+
+  const active = body.active ? 1 : 0;
+  await c.env.DB.prepare('UPDATE customers SET active = ? WHERE id = ?').bind(active, id).run();
+
+  await audit(
+    c.env,
+    c.get('admin').username,
+    'customer.active',
+    'customer',
+    id,
+    `${existing.name} → ${active ? 'restored' : 'blocked'}`,
+  );
+
+  return c.json({ ok: true, active: active === 1 });
 });
 
 admin.get('/audit', async (c) => {
@@ -1341,4 +1376,106 @@ admin.patch('/reviews/:id', async (c) => {
   );
 
   return c.json({ ok: true, visible: visible === 1 });
+});
+
+/* ══════════════════════════ notifications ══════════════════════════
+ *
+ * Deliberately not a stored, dismissable log — a count that has to be marked
+ * read can drift from reality ("it still says 3 but I confirmed all of
+ * them"). This instead recomputes what actually still needs attention on
+ * every request, so the bell can never say something that isn't true right
+ * now.
+ */
+
+interface Notification {
+  kind: string;
+  count: number;
+  label: string;
+  href: string;
+}
+
+admin.get('/notifications', async (c) => {
+  const [pending, lowStock, outOfStock, lowRatings] = await Promise.all([
+    c.env.DB.prepare("SELECT COUNT(*) AS n FROM orders WHERE status = 'pending'").first<{ n: number }>(),
+    c.env.DB.prepare("SELECT COUNT(*) AS n FROM products WHERE status = 'active' AND stock_state = 'low'").first<{
+      n: number;
+    }>(),
+    c.env.DB.prepare("SELECT COUNT(*) AS n FROM products WHERE status = 'active' AND stock_state = 'out'").first<{
+      n: number;
+    }>(),
+    c.env.DB
+      .prepare(
+        "SELECT COUNT(*) AS n FROM reviews WHERE visible = 1 AND rating <= 2 AND created_at >= strftime('%s','now','-14 days')",
+      )
+      .first<{ n: number }>(),
+  ]);
+
+  const items: Notification[] = [];
+  const push = (n: number | undefined, kind: string, label: (n: number) => string, href: string) => {
+    if ((n ?? 0) > 0) items.push({ kind, count: n!, label: label(n!), href });
+  };
+
+  push(pending?.n, 'orders_pending', (n) => `${n} order${n === 1 ? '' : 's'} waiting to be confirmed`, '/admin/orders?status=pending');
+  push(outOfStock?.n, 'out_of_stock', (n) => `${n} product${n === 1 ? '' : 's'} out of stock`, '/admin/inventory');
+  push(lowStock?.n, 'low_stock', (n) => `${n} product${n === 1 ? '' : 's'} running low`, '/admin/inventory');
+  push(lowRatings?.n, 'low_ratings', (n) => `${n} low rating${n === 1 ? '' : 's'} in the last 2 weeks`, '/admin/reviews');
+
+  return c.json({ items, total: items.reduce((sum, i) => sum + i.count, 0) });
+});
+
+/* ══════════════════════════ Google Analytics / Search Console ══════════════════════════
+ *
+ * Read-only reporting, pulled with a Google service account instead of a
+ * developer having to sign into GA4 to check anything. What the account can
+ * see is decided entirely inside GA4 and Search Console, by whichever access
+ * the owner granted its email — this Worker only holds the key that proves
+ * which account is asking.
+ */
+
+async function settingValue(env: Env, key: string): Promise<string> {
+  const row = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(key).first<{ value: string }>();
+  return row?.value ?? '';
+}
+
+admin.get('/google/status', async (c) => {
+  return c.json({
+    connected: googleConfigured(c.env),
+    service_account_email: googleServiceAccountEmail(c.env),
+    ga4_property_id: await settingValue(c.env, 'ga4_property_id'),
+    gsc_site_url: await settingValue(c.env, 'gsc_site_url'),
+  });
+});
+
+admin.get('/google/ga4/properties', async (c) => {
+  const result = await listGa4Properties(c.env);
+  if (!result.ok) return c.json({ ok: false, error: result.error, properties: [] });
+  return c.json({ ok: true, error: '', properties: result.data });
+});
+
+admin.get('/google/ga4/summary', async (c) => {
+  const property = await settingValue(c.env, 'ga4_property_id');
+  if (!property) {
+    return c.json({ ok: false, error: 'No GA4 property selected yet — pick one below.', summary: null });
+  }
+  const days = Math.min(Math.max(Number(new URL(c.req.url).searchParams.get('days')) || 7, 1), 90);
+  const result = await ga4Summary(c.env, property, days);
+  if (!result.ok) return c.json({ ok: false, error: result.error, summary: null });
+  return c.json({ ok: true, error: '', summary: result.data });
+});
+
+admin.get('/google/gsc/sites', async (c) => {
+  const result = await listSearchConsoleSites(c.env);
+  if (!result.ok) return c.json({ ok: false, error: result.error, sites: [] });
+  return c.json({ ok: true, error: '', sites: result.data });
+});
+
+admin.get('/google/gsc/summary', async (c) => {
+  const site = await settingValue(c.env, 'gsc_site_url');
+  if (!site) {
+    return c.json({ ok: false, error: 'No Search Console site selected yet — pick one below.', summary: null });
+  }
+  const days = Math.min(Math.max(Number(new URL(c.req.url).searchParams.get('days')) || 28, 1), 90);
+  const result = await searchConsoleSummary(c.env, site, days);
+  if (!result.ok) return c.json({ ok: false, error: result.error, summary: null });
+  return c.json({ ok: true, error: '', summary: result.data });
 });

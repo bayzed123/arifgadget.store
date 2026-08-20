@@ -1,7 +1,8 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { api } from '../../lib/api';
+import { api, ApiError } from '../../lib/api';
 import { dateTime, money, number, orderStatus, ORDER_STATUS_TONE, relativeTime } from '../../lib/format';
-import { Empty, Spinner } from '../../components/ui';
+import { useToast } from '../../lib/store';
+import { ConfirmDialog, Empty, Spinner } from '../../components/ui';
 
 interface CustomerRow {
   id: number;
@@ -12,6 +13,7 @@ interface CustomerRow {
   city: string;
   created_at: number;
   last_login_at: number | null;
+  active: number;
   orders: number;
   spent: number;
   last_order_at: number | null;
@@ -40,6 +42,7 @@ interface Page {
  * they live in Orders, which lists every order however it was placed.
  */
 export function Customers() {
+  const toast = useToast();
   const [data, setData] = useState<Page | null>(null);
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
@@ -48,6 +51,8 @@ export function Customers() {
 
   const [openId, setOpenId] = useState<number | null>(null);
   const [orders, setOrders] = useState<CustomerOrder[] | null>(null);
+  const [blockTarget, setBlockTarget] = useState<CustomerRow | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -80,6 +85,21 @@ export function Customers() {
       setOrders(res.orders);
     } catch {
       setOrders([]);
+    }
+  }
+
+  /** Blocking asks for confirmation — it stops someone signing in right away. Restoring doesn't need it. */
+  async function setActive(customer: CustomerRow, active: boolean) {
+    setBusyId(customer.id);
+    try {
+      await api(`/api/admin/customers/${customer.id}`, { method: 'PATCH', auth: true, body: { active } });
+      toast(active ? `${customer.name} restored` : `${customer.name} blocked`, 'success');
+      setBlockTarget(null);
+      load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not update this account', 'error');
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -137,6 +157,7 @@ export function Customers() {
                     <th className="num">Orders</th>
                     <th className="num">Spent</th>
                     <th>Joined</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -191,11 +212,35 @@ export function Customers() {
                         <td>
                           <span className="small">{dateTime(customer.created_at)}</span>
                         </td>
+                        <td>
+                          {customer.active ? (
+                            <button
+                              className="btn ghost sm"
+                              disabled={busyId === customer.id}
+                              onClick={() => setBlockTarget(customer)}
+                            >
+                              Block
+                            </button>
+                          ) : (
+                            <div className="stack gap-4">
+                              <span className="badge low">
+                                <span className="dot" /> Blocked
+                              </span>
+                              <button
+                                className="btn ghost sm"
+                                disabled={busyId === customer.id}
+                                onClick={() => setActive(customer, true)}
+                              >
+                                {busyId === customer.id ? '…' : 'Restore'}
+                              </button>
+                            </div>
+                          )}
+                        </td>
                       </tr>
 
                       {openId === customer.id && (
                         <tr>
-                          <td colSpan={6} style={{ background: 'var(--surface-inset)' }}>
+                          <td colSpan={7} style={{ background: 'var(--surface-inset)' }}>
                             {!orders ? (
                               <Spinner />
                             ) : orders.length === 0 ? (
@@ -264,6 +309,16 @@ export function Customers() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={blockTarget !== null}
+        title={`Block ${blockTarget?.name}?`}
+        message="They will not be able to sign in or use an existing session from the next request onward. Nothing about their account or past orders is deleted, and this can be reversed any time."
+        confirmLabel="Yes, block them"
+        busy={busyId === blockTarget?.id}
+        onConfirm={() => blockTarget && setActive(blockTarget, false)}
+        onCancel={() => setBlockTarget(null)}
+      />
     </>
   );
 }
