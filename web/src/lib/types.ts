@@ -174,7 +174,39 @@ export interface CourierConnection {
     api_key_length: number;
     secret_key_length: number;
     base_url: string;
+    /** Which account this is — the label staff gave it, or "Deploy secret" for the legacy env-var account. */
+    account_label: string;
+    source: 'dashboard' | 'legacy' | 'none';
   };
+}
+
+/**
+ * One Steadfast account, as added from Settings → Courier accounts. The shop
+ * can hold several — only one is ever active (used for every live courier
+ * call) at a time. Never carries the key itself, only whether one is set and
+ * how long it is.
+ */
+export interface CourierAccount {
+  id: number;
+  provider: string;
+  label: string;
+  api_key_present: boolean;
+  secret_key_present: boolean;
+  api_key_length: number;
+  secret_key_length: number;
+  base_url: string;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+/** One COD remittance Steadfast has actually paid the shop — real money, not the running balance. */
+export interface CourierPayment {
+  reference: string;
+  amount: number;
+  status: string;
+  note: string;
+  paidAt: string;
 }
 
 /**

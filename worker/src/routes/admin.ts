@@ -17,13 +17,16 @@ import {
 import { hashPassword, randomSalt, signToken, verifyPassword, verifyToken } from '../lib/auth';
 import { PRODUCT_COLUMNS, loadTiers, toAdminProduct, type ProductRow } from '../lib/catalog';
 import {
+  activeCourierAccountId,
   codAmountFor,
   courierBalance,
   courierConfigured,
   courierLabel,
+  courierPayments,
   createConsignment,
   credentialShape,
 } from '../lib/steadfast';
+import { encryptSecret } from '../lib/crypto';
 import { ORDER_STATUSES, STATUS_ALIASES, NEXT_STATUSES, label } from '../lib/checkpoints';
 import {
   applyCourierCheckpoint,
@@ -911,9 +914,9 @@ admin.get('/audit', async (c) => {
  * their values), what the courier actually said, and what to do about it.
  */
 admin.get('/courier', async (c) => {
-  const shape = credentialShape(c.env);
+  const shape = await credentialShape(c.env);
 
-  if (!courierConfigured(c.env)) {
+  if (!(await courierConfigured(c.env))) {
     const missing = [
       shape.api_key_present ? null : 'STEADFAST_API_KEY',
       shape.secret_key_present ? null : 'STEADFAST_SECRET_KEY',
@@ -923,8 +926,8 @@ admin.get('/courier', async (c) => {
       connected: false,
       balance: null,
       reason: 'not_configured',
-      message: `The Worker has no ${missing.join(' and ')}. Add ${missing.length > 1 ? 'them' : 'it'} to the repository secrets and run the deploy again.`,
-      fix: 'GitHub → Settings → Secrets and variables → Actions. The deploy copies them onto the Worker; nothing needs pasting into Cloudflare by hand.',
+      message: `No courier account is set up. Add one from Settings → Courier accounts, or set ${missing.join(' and ')} as repository secrets and run the deploy again.`,
+      fix: 'Settings → Courier accounts → Add account is the quickest path — it takes effect immediately, no redeploy needed.',
       credentials: shape,
     });
   }
@@ -949,7 +952,9 @@ admin.get('/courier', async (c) => {
 
   const fix =
     reason === 'rejected'
-      ? 'Steadfast received the keys and refused them. Check the API key and secret key in the Steadfast merchant portal, then update STEAT_FAST_API and STEAT_FAST_SECRET_KEY in the GitHub repository secrets and re-run the Deploy workflow. If the keys are definitely right, ask Steadfast whether your account needs the calling server allow-listed.'
+      ? shape.source === 'dashboard'
+        ? `Steadfast received the "${shape.account_label}" account's keys and refused them. Check the API key and secret key in the Steadfast merchant portal, then update this account from Settings → Courier accounts. If the keys are definitely right, ask Steadfast whether your account needs the calling server allow-listed.`
+        : 'Steadfast received the keys and refused them. Check the API key and secret key in the Steadfast merchant portal, then update STEAT_FAST_API and STEAT_FAST_SECRET_KEY in the GitHub repository secrets and re-run the Deploy workflow, or add the account fresh from Settings → Courier accounts instead. If the keys are definitely right, ask Steadfast whether your account needs the calling server allow-listed.'
       : reason === 'courier_down'
         ? 'The keys look fine — Steadfast itself is returning an error. Try again shortly; nothing needs changing at this end.'
         : 'Could not reach the Steadfast portal at all. This is usually temporary; if it persists, confirm the portal address with Steadfast.';
@@ -963,6 +968,180 @@ admin.get('/courier', async (c) => {
     fix,
     credentials: shape,
   });
+});
+
+/* ─────────────────────────── courier accounts ───────────────────────────
+ *
+ * The shop runs more than one Steadfast account. These routes let staff add,
+ * switch, and remove them from Settings — no GitHub secret and no redeploy.
+ * Keys are encrypted before they touch the database (lib/crypto.ts) and are
+ * never sent back to the browser once saved: every response here reports
+ * presence and length only, the same discipline GET /courier already follows
+ * for the legacy deploy-secret account.
+ */
+
+interface CourierAccountRow {
+  id: number;
+  provider: string;
+  label: string;
+  api_key_length: number;
+  secret_key_length: number;
+  base_url: string;
+  is_active: number;
+  created_at: number;
+  updated_at: number;
+}
+
+function publicAccount(row: CourierAccountRow) {
+  return {
+    id: row.id,
+    provider: row.provider,
+    label: row.label,
+    api_key_present: row.api_key_length > 0,
+    secret_key_present: row.secret_key_length > 0,
+    api_key_length: row.api_key_length,
+    secret_key_length: row.secret_key_length,
+    base_url: row.base_url,
+    active: row.is_active === 1,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+admin.get('/courier/accounts', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT id, provider, label, api_key_length, secret_key_length, base_url, is_active, created_at, updated_at
+       FROM courier_accounts ORDER BY is_active DESC, created_at ASC`,
+  ).all<CourierAccountRow>();
+  return c.json({ accounts: (results ?? []).map(publicAccount) });
+});
+
+/** Adds an account. The first one added is made active automatically — otherwise nothing would be connected. */
+admin.post('/courier/accounts', async (c) => {
+  requireOwner(c);
+  const body = await readJson(c);
+  const label = requireString(body.label, 'label', 60);
+  const apiKey = requireString(body.api_key, 'api_key', 200);
+  const secretKey = requireString(body.secret_key, 'secret_key', 200);
+  const baseUrl = optionalString(body.base_url, '', 200).replace(/\/$/, '');
+
+  const [apiKeyEnc, secretKeyEnc] = await Promise.all([
+    encryptSecret(secret(c.env), apiKey),
+    encryptSecret(secret(c.env), secretKey),
+  ]);
+
+  const existing = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM courier_accounts WHERE provider = 'steadfast'",
+  ).first<{ n: number }>();
+  const makeActive = (existing?.n ?? 0) === 0 || body.make_active === true;
+
+  if (makeActive) {
+    await c.env.DB.prepare("UPDATE courier_accounts SET is_active = 0 WHERE provider = 'steadfast'").run();
+  }
+
+  const inserted = await c.env.DB.prepare(
+    `INSERT INTO courier_accounts
+       (provider, label, api_key_enc, secret_key_enc, api_key_length, secret_key_length, base_url, is_active)
+     VALUES ('steadfast', ?, ?, ?, ?, ?, ?, ?)
+     RETURNING id, provider, label, api_key_length, secret_key_length, base_url, is_active, created_at, updated_at`,
+  )
+    .bind(label, apiKeyEnc, secretKeyEnc, apiKey.length, secretKey.length, baseUrl, makeActive ? 1 : 0)
+    .first<CourierAccountRow>();
+
+  await audit(c.env, c.get('admin').username, 'courier.account.add', 'courier_account', String(inserted?.id ?? ''), `Added "${label}"${makeActive ? ' and made it active' : ''}`);
+
+  return c.json({ account: publicAccount(inserted as CourierAccountRow) }, 201);
+});
+
+/** Renames an account or rotates its keys. Only the fields sent are changed. */
+admin.patch('/courier/accounts/:id', async (c) => {
+  requireOwner(c);
+  const id = Number(c.req.param('id'));
+  const row = await c.env.DB.prepare('SELECT id, label FROM courier_accounts WHERE id = ?')
+    .bind(id)
+    .first<{ id: number; label: string }>();
+  if (!row) notFound('Courier account not found');
+
+  const body = await readJson(c);
+  const sets: string[] = ['updated_at = unixepoch()'];
+  const binds: unknown[] = [];
+
+  if (body.label !== undefined) {
+    sets.push('label = ?');
+    binds.push(requireString(body.label, 'label', 60));
+  }
+  if (body.base_url !== undefined) {
+    sets.push('base_url = ?');
+    binds.push(optionalString(body.base_url, '', 200).replace(/\/$/, ''));
+  }
+  if (body.api_key !== undefined) {
+    const apiKey = requireString(body.api_key, 'api_key', 200);
+    sets.push('api_key_enc = ?', 'api_key_length = ?');
+    binds.push(await encryptSecret(secret(c.env), apiKey), apiKey.length);
+  }
+  if (body.secret_key !== undefined) {
+    const secretKey = requireString(body.secret_key, 'secret_key', 200);
+    sets.push('secret_key_enc = ?', 'secret_key_length = ?');
+    binds.push(await encryptSecret(secret(c.env), secretKey), secretKey.length);
+  }
+
+  const updated = await c.env.DB.prepare(
+    `UPDATE courier_accounts SET ${sets.join(', ')} WHERE id = ?
+     RETURNING id, provider, label, api_key_length, secret_key_length, base_url, is_active, created_at, updated_at`,
+  )
+    .bind(...binds, id)
+    .first<CourierAccountRow>();
+
+  await audit(c.env, c.get('admin').username, 'courier.account.update', 'courier_account', String(id), `Updated "${row.label}"`);
+
+  return c.json({ account: publicAccount(updated as CourierAccountRow) });
+});
+
+/** Switches which account every Steadfast call uses. Nothing about already-booked orders changes. */
+admin.post('/courier/accounts/:id/activate', async (c) => {
+  requireOwner(c);
+  const id = Number(c.req.param('id'));
+  const row = await c.env.DB.prepare('SELECT id, label FROM courier_accounts WHERE id = ?')
+    .bind(id)
+    .first<{ id: number; label: string }>();
+  if (!row) notFound('Courier account not found');
+
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE courier_accounts SET is_active = 0 WHERE provider = 'steadfast'"),
+    c.env.DB.prepare('UPDATE courier_accounts SET is_active = 1, updated_at = unixepoch() WHERE id = ?').bind(id),
+  ]);
+
+  await audit(c.env, c.get('admin').username, 'courier.account.activate', 'courier_account', String(id), `Made "${row.label}" the active account`);
+
+  return c.json({ ok: true });
+});
+
+/** Removes an account. Orders already booked under it keep their own record of what happened — see courier_account_id. */
+admin.delete('/courier/accounts/:id', async (c) => {
+  requireOwner(c);
+  const id = Number(c.req.param('id'));
+  const row = await c.env.DB.prepare('SELECT id, label FROM courier_accounts WHERE id = ?')
+    .bind(id)
+    .first<{ id: number; label: string }>();
+  if (!row) notFound('Courier account not found');
+
+  await c.env.DB.prepare('DELETE FROM courier_accounts WHERE id = ?').bind(id).run();
+  await audit(c.env, c.get('admin').username, 'courier.account.remove', 'courier_account', String(id), `Removed "${row.label}"`);
+
+  return c.json({ ok: true });
+});
+
+/**
+ * Real money Steadfast has paid the shop for delivered COD parcels — not the
+ * single running balance figure. See courierPayments() for why this can fail
+ * honestly instead of ever showing an invented number.
+ */
+admin.get('/courier/payments', async (c) => {
+  const result = await courierPayments(c.env);
+  if (!result.ok) {
+    return c.json({ ok: false, error: result.error, payments: [] });
+  }
+  return c.json({ ok: true, error: '', payments: result.data });
 });
 
 /** Books one order with Steadfast. Explicit staff action, never automatic. */
@@ -1009,13 +1188,21 @@ admin.post('/orders/:id/courier', async (c) => {
   }
 
   const cod = codAmountFor(order);
+  const accountId = await activeCourierAccountId(c.env);
   await c.env.DB.prepare(
     `UPDATE orders
         SET courier = 'steadfast', consignment_id = ?, tracking_code = ?, courier_status = ?,
-            courier_cod_amount = ?, courier_synced_at = strftime('%s','now')
+            courier_cod_amount = ?, courier_synced_at = strftime('%s','now'), courier_account_id = ?
       WHERE id = ?`,
   )
-    .bind(String(booked.data.consignment_id), booked.data.tracking_code ?? '', booked.data.status ?? 'pending', cod, id)
+    .bind(
+      String(booked.data.consignment_id),
+      booked.data.tracking_code ?? '',
+      booked.data.status ?? 'pending',
+      cod,
+      accountId,
+      id,
+    )
     .run();
 
   await audit(
@@ -1061,7 +1248,7 @@ admin.post('/orders/:id/courier/sync', async (c) => {
  * rather than trying to walk the whole history and dying halfway.
  */
 admin.post('/courier/sync', async (c) => {
-  if (!courierConfigured(c.env)) badRequest('Steadfast is not connected.');
+  if (!(await courierConfigured(c.env))) badRequest('Steadfast is not connected.');
 
   const { results } = await c.env.DB.prepare(
     `SELECT id, order_no, status, consignment_id

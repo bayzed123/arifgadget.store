@@ -405,17 +405,30 @@ h3 { font-size: 1.1rem; }
 
 /* ============================================================ category tiles */
 
+/* Mobile-first: a compact horizontal-scrolling strip of small cards — the
+   same pattern Daraz/Amazon/AliExpress use on their home screens. The old
+   2-column grid put full-height cards (18px padding, 1.7rem icon, a two-line
+   label) at half the phone's width each, which read as an oversized, messy
+   block before the shopper ever reached a product. Categories are already
+   fully browsable from the hamburger drawer and the bottom nav's Category
+   tab (see MenuDrawer.tsx), so this strip only has to work as a fast visual
+   entry point, not the only way in — it can afford to be small. */
 .cat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: 12px;
-  margin-bottom: 36px;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  margin: 0 -2px 28px;
+  scrollbar-width: none;
 }
+.cat-grid::-webkit-scrollbar { display: none; }
 .cat-tile {
+  flex: 0 0 auto;
+  width: 96px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 18px 12px;
+  padding: 14px 8px 11px;
   text-align: center;
   transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
@@ -424,8 +437,23 @@ h3 { font-size: 1.1rem; }
   border-color: var(--brand);
   box-shadow: var(--shadow);
 }
-.cat-tile .ic { font-size: 1.7rem; margin-bottom: 7px; }
-.cat-tile .nm { font-weight: 700; font-size: 0.9rem; }
+.cat-tile .ic { font-size: 1.4rem; margin-bottom: 5px; }
+.cat-tile .nm { font-weight: 700; font-size: 0.78rem; line-height: 1.15; }
+.cat-tile .tiny.dim { font-size: 0.68rem; margin-top: 1px; }
+
+/* Desktop has room to show every category at once without scrolling, so it
+   wraps into a tight grid instead — still small cards, just laid out flat
+   rather than in a scroll strip nobody would think to swipe on a mouse. */
+@media (min-width: 720px) {
+  .cat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+    overflow: visible;
+    margin: 0 0 32px;
+    padding: 0;
+  }
+  .cat-tile { width: auto; }
+}
 
 /* ============================================================ product grid */
 

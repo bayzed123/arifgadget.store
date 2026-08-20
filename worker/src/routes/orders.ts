@@ -303,7 +303,7 @@ async function refreshIfStale(
   env: Env,
   order: CourierOrderRow & { status: string; courier_status: string; courier_synced_at: number | null },
 ): Promise<Partial<{ courier_status: string; courier_synced_at: number; status: string }>> {
-  if (!order.consignment_id || !courierConfigured(env)) return {};
+  if (!order.consignment_id || !(await courierConfigured(env))) return {};
   if (isFinal(order.status)) return {};
 
   const age = Math.floor(Date.now() / 1000) - (order.courier_synced_at ?? 0);
