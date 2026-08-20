@@ -86,6 +86,8 @@ export interface StoreSettings {
   credit_author_url?: string;
   owner_name?: string;
   facebook_url?: string;
+  /** Set from Settings → Homepage. Empty/absent means the bundled default banner. */
+  hero_banner_url?: string;
 }
 
 export interface QuoteLine {

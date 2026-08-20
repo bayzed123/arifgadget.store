@@ -6,8 +6,9 @@ import { money, number } from '../lib/format';
 import { ProductGallery } from '../components/ProductGallery';
 import { Prose } from '../components/Prose';
 import { ProductCard } from '../components/ProductCard';
+import { ReviewSection } from '../components/ReviewSection';
 import { Empty, Rating, Spinner, StockBadge } from '../components/ui';
-import { setDirectBuy, useCart } from '../lib/store';
+import { setDirectBuy, useCart, useCustomer, useToast, useWishlist } from '../lib/store';
 import { trackAddToCart, trackSelectItem, trackViewItem } from '../lib/analytics';
 
 /** Mirrors the Worker's tier resolution so the page can price instantly. */
@@ -31,6 +32,9 @@ export function Product() {
   const [error, setError] = useState('');
   const cart = useCart();
   const navigate = useNavigate();
+  const wishlist = useWishlist();
+  const { customer } = useCustomer();
+  const toast = useToast();
 
   useEffect(() => {
     setProduct(null);
@@ -63,6 +67,38 @@ export function Product() {
   const lineTotal = unitPrice * qty;
   const savings = (product.price - unitPrice) * qty;
   const specs = Object.entries(product.specs);
+  const saved = wishlist.has(product.id);
+  // Captured once, outside the closures below — TypeScript's null-narrowing
+  // of `product` from the guard above does not carry into a nested function.
+  const productId = product.id;
+  const productName = product.name;
+
+  function toggleWishlist() {
+    if (!customer) {
+      navigate('/account');
+      return;
+    }
+    void wishlist.toggle(productId);
+  }
+
+  /** Native share sheet where available; copies the link everywhere else. */
+  async function share() {
+    const url = window.location.href;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: productName, url });
+      } catch {
+        /* the shopper cancelled the share sheet — not an error */
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('Product link copied', 'success');
+    } catch {
+      toast(url, 'info');
+    }
+  }
 
   return (
     <>
@@ -267,6 +303,22 @@ export function Product() {
             >
               Add to cart
             </button>
+            <div className="row gap-8">
+              <button
+                className="btn ghost"
+                aria-pressed={saved}
+                onClick={toggleWishlist}
+                style={{
+                  flex: 1,
+                  ...(saved ? { color: 'var(--bad)', borderColor: 'color-mix(in srgb, var(--bad) 35%, var(--line))' } : {}),
+                }}
+              >
+                {saved ? '♥ Saved' : '♡ Save'}
+              </button>
+              <button className="btn ghost" style={{ flex: 1 }} onClick={() => void share()}>
+                ↗ Share
+              </button>
+            </div>
           </div>
 
           {product.stock > 0 && qty > product.stock && (
@@ -274,6 +326,8 @@ export function Product() {
           )}
         </aside>
       </div>
+
+      <ReviewSection slug={product.slug} productName={product.name} />
 
       {related.length > 0 && (
         <section style={{ marginTop: 48 }}>

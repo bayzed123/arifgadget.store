@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { api, ApiError } from '../../lib/api';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { api, ApiError, mediaUrl, uploadImage } from '../../lib/api';
 import { dateTime, money } from '../../lib/format';
 import { useAuth, useToast } from '../../lib/store';
 import { Empty, Spinner, ConfirmDialog } from '../../components/ui';
@@ -41,6 +41,94 @@ const LABELS: Record<string, { label: string; hint: string }> = {
   free_shipping_over: { label: 'Free delivery over (৳)', hint: 'Order value that unlocks free delivery' },
   tax_pct: { label: 'Tax percentage', hint: 'Applied to the net order value. 0 disables it.' },
 };
+
+/**
+ * The big image at the very top of the shop. Used to be a bundled SVG file
+ * that only a developer could change; this lets staff replace it any time —
+ * uploaded through the same media pipeline as product photos, and live the
+ * moment it saves, no redeploy.
+ */
+function HeroBannerPanel({
+  url,
+  onSaved,
+  canEdit,
+}: {
+  url: string;
+  onSaved: (url: string) => void;
+  canEdit: boolean;
+}) {
+  const toast = useToast();
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  async function save(next: string) {
+    try {
+      await api('/api/admin/settings', { method: 'PATCH', auth: true, body: { hero_banner_url: next } });
+      onSaved(next);
+      toast(next ? 'Homepage banner updated' : 'Homepage banner reset to the default', 'success');
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not save the banner', 'error');
+    }
+  }
+
+  async function onFile(file: File) {
+    setUploading(true);
+    try {
+      const uploaded = await uploadImage(file);
+      await save(uploaded.url);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Upload failed', 'error');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Homepage banner</h3>
+          <p className="tiny dim">
+            The big image at the top of the shop. Replace it any time — it goes live immediately, no redeploy.
+          </p>
+        </div>
+      </div>
+      <div className="panel-body stack gap-16">
+        <div className="hero-banner" style={{ maxWidth: 480 }}>
+          <img
+            src={url ? mediaUrl(url) : `${import.meta.env.BASE_URL}brand/banner.svg`}
+            alt="Current homepage banner"
+            style={{ width: '100%', height: 'auto', display: 'block' }}
+          />
+        </div>
+        {canEdit && (
+          <div className="row gap-8 wrap-row">
+            <button className="btn ghost sm" disabled={uploading} onClick={() => fileInput.current?.click()}>
+              {uploading ? 'Uploading…' : url ? 'Replace banner' : 'Upload banner'}
+            </button>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) void onFile(file);
+              }}
+            />
+            {url && (
+              <button className="btn ghost sm" disabled={uploading} onClick={() => save('')}>
+                Reset to default
+              </button>
+            )}
+          </div>
+        )}
+        <p className="tiny dim">Best results: a wide banner, around 1600 × 560 pixels, under 5 MB.</p>
+      </div>
+    </div>
+  );
+}
 
 /**
  * The shop runs more than one Steadfast account. This panel lets staff add,
@@ -404,6 +492,14 @@ export function Settings() {
             Shipping and tax feed straight into the checkout calculation — changes apply to the next quote.
           </p>
         </div>
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <HeroBannerPanel
+          url={values.hero_banner_url ?? ''}
+          canEdit={canEdit}
+          onSaved={(next) => setValues((prev) => ({ ...prev, hero_banner_url: next }))}
+        />
       </div>
 
       <div className="chart-grid split">

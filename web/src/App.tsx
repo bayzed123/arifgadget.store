@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { AuthProvider, CartProvider, CustomerProvider, ToastProvider } from './lib/store';
+import { AuthProvider, CartProvider, CustomerProvider, ToastProvider, WishlistProvider } from './lib/store';
 import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
 import { Catalog } from './pages/Catalog';
@@ -20,6 +20,7 @@ import { Inventory } from './pages/admin/Inventory';
 import { Settings } from './pages/admin/Settings';
 import { Content } from './pages/admin/Content';
 import { Customers } from './pages/admin/Customers';
+import { Reviews } from './pages/admin/Reviews';
 import { Guide } from './pages/admin/Guide';
 import { Preview } from './pages/admin/Preview';
 
@@ -31,6 +32,7 @@ export function App() {
     <ToastProvider>
       <AuthProvider>
         <CustomerProvider>
+          <WishlistProvider>
           <CartProvider>
           <BrowserRouter basename={basename || undefined}>
             <Routes>
@@ -56,6 +58,7 @@ export function App() {
                 <Route path="orders" element={<Orders />} />
                 <Route path="inventory" element={<Inventory />} />
                 <Route path="customers" element={<Customers />} />
+                <Route path="reviews" element={<Reviews />} />
                 <Route path="content" element={<Content />} />
                 {/* The offer popup deserves its own address — it was too easy to miss as a tab. */}
                 <Route path="offers" element={<Content initialTab="banners" />} />
@@ -67,6 +70,7 @@ export function App() {
             </Routes>
           </BrowserRouter>
           </CartProvider>
+          </WishlistProvider>
         </CustomerProvider>
       </AuthProvider>
     </ToastProvider>

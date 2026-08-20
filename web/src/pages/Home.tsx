@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, mediaUrl } from '../lib/api';
 import type { Category, Product, StoreSettings } from '../lib/types';
 import { ProductCard } from '../components/ProductCard';
 import { Empty, Spinner } from '../components/ui';
@@ -41,10 +41,15 @@ export function Home() {
       <section className="hero">
         <div className="hero-banner">
           <img
-            src={`${import.meta.env.BASE_URL}brand/banner.svg`}
+            // Settings → Homepage lets staff replace this with their own
+            // banner any time, no redeploy — falls back to the bundled
+            // default the moment that setting is empty, so there's never a
+            // broken image while nobody has uploaded one yet.
+            src={data.settings.hero_banner_url ? mediaUrl(data.settings.hero_banner_url) : `${import.meta.env.BASE_URL}brand/banner.svg`}
             alt="Welcome to Arif Gadget Store — genuine gadgets delivered across Bangladesh"
-            width={1600}
-            height={560}
+            // No fixed width/height: the bundled default is 1600×560, but a
+            // staff-uploaded banner can be any shape, and .hero-banner img
+            // already scales to width:100%;height:auto in styles.css.
           />
         </div>
 
@@ -77,24 +82,6 @@ export function Home() {
               <span className="tiny dim">{item.d}</span>
             </span>
           </div>
-        ))}
-      </div>
-
-      <div className="section-head">
-        <div>
-          <div className="rule" />
-          <h2>Shop by category</h2>
-        </div>
-      </div>
-      <div className="cat-grid">
-        {data.categories.map((category) => (
-          <Link key={category.id} to={`/catalog?category=${category.slug}`} className="cat-tile">
-            <div className="ic" aria-hidden="true">
-              {category.icon}
-            </div>
-            <div className="nm">{category.name}</div>
-            <div className="tiny dim">{category.product_count} items</div>
-          </Link>
         ))}
       </div>
 

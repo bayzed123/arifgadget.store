@@ -34,6 +34,28 @@ catalog.get('/categories', async (c) => {
   return c.json({ categories: results ?? [] });
 });
 
+/** Distinct brand names for the catalog filter dropdown, optionally scoped to one category. */
+catalog.get('/brands', async (c) => {
+  const category = new URL(c.req.url).searchParams.get('category')?.trim();
+  const where = ["p.status = 'active'", "p.brand <> ''"];
+  const binds: unknown[] = [];
+  if (category) {
+    where.push('c.slug = ?');
+    binds.push(category);
+  }
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT DISTINCT p.brand
+       FROM products p LEFT JOIN categories c ON c.id = p.category_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY p.brand ASC`,
+  )
+    .bind(...binds)
+    .all<{ brand: string }>();
+
+  return c.json({ brands: (results ?? []).map((r) => r.brand) });
+});
+
 catalog.get('/products', async (c) => {
   const url = new URL(c.req.url);
   const category = url.searchParams.get('category')?.trim();
@@ -41,6 +63,10 @@ catalog.get('/products', async (c) => {
   const brand = url.searchParams.get('brand')?.trim();
   const featured = url.searchParams.get('featured');
   const inStock = url.searchParams.get('in_stock');
+  // Poisha, like every other price in this codebase — the frontend converts
+  // the taka figure a shopper types into a price-range field before sending it.
+  const priceMin = Number(url.searchParams.get('price_min'));
+  const priceMax = Number(url.searchParams.get('price_max'));
   const sort = SORTS[url.searchParams.get('sort') ?? ''] ?? SORTS.newest;
 
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 24, 1), 60);
@@ -60,6 +86,14 @@ catalog.get('/products', async (c) => {
   }
   if (featured === '1' || featured === 'true') where.push('p.featured = 1');
   if (inStock === '1' || inStock === 'true') where.push('p.stock > 0');
+  if (Number.isFinite(priceMin) && priceMin > 0) {
+    where.push('p.price >= ?');
+    binds.push(priceMin);
+  }
+  if (Number.isFinite(priceMax) && priceMax > 0) {
+    where.push('p.price <= ?');
+    binds.push(priceMax);
+  }
   if (q) {
     where.push('(p.name LIKE ? OR p.brand LIKE ? OR p.tags LIKE ? OR p.sku LIKE ? OR p.summary LIKE ?)');
     const like = `%${q}%`;
