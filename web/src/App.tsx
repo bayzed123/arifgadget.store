@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { AuthProvider, CartProvider, CustomerProvider, ToastProvider } from './lib/store';
+import { AuthProvider, CartProvider, CustomerProvider, ToastProvider, WishlistProvider } from './lib/store';
 import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
 import { Catalog } from './pages/Catalog';
@@ -32,6 +32,7 @@ export function App() {
     <ToastProvider>
       <AuthProvider>
         <CustomerProvider>
+          <WishlistProvider>
           <CartProvider>
           <BrowserRouter basename={basename || undefined}>
             <Routes>
@@ -69,6 +70,7 @@ export function App() {
             </Routes>
           </BrowserRouter>
           </CartProvider>
+          </WishlistProvider>
         </CustomerProvider>
       </AuthProvider>
     </ToastProvider>

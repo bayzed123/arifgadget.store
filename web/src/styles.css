@@ -479,6 +479,27 @@ h3 { font-size: 1.1rem; }
 }
 .ribbon.gold { background: linear-gradient(135deg, var(--brand), var(--gold)); color: #0a101e; }
 
+.wish-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(2px);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.12s;
+}
+.wish-btn:hover { transform: scale(1.08); }
+.wish-btn.is-saved { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+
 .soldout {
   position: absolute;
   inset: 0;

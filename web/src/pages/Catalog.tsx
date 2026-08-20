@@ -27,12 +27,37 @@ export function Catalog() {
   const [data, setData] = useState<Page | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [brands, setBrands] = useState<string[]>([]);
 
   const category = params.get('category') ?? '';
   const q = params.get('q') ?? '';
   const sort = params.get('sort') ?? 'newest';
   const inStock = params.get('in_stock') === '1';
+  const brand = params.get('brand') ?? '';
+  // Kept in the URL as taka — a shopper reading /catalog?price_min=500 should
+  // see their own number, not a poisha figure that means nothing to them.
+  const priceMin = params.get('price_min') ?? '';
+  const priceMax = params.get('price_max') ?? '';
   const page = Number(params.get('page')) || 1;
+
+  // Local, uncommitted price inputs — applied on blur/Enter/button rather than
+  // per keystroke, so typing "1000" doesn't fire nine requests along the way.
+  const [minDraft, setMinDraft] = useState(priceMin);
+  const [maxDraft, setMaxDraft] = useState(priceMax);
+  useEffect(() => {
+    setMinDraft(priceMin);
+    setMaxDraft(priceMax);
+  }, [priceMin, priceMax]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api<{ brands: string[] }>(`/api/brands${category ? `?category=${encodeURIComponent(category)}` : ''}`, {
+      signal: controller.signal,
+    })
+      .then((res) => setBrands(res.brands))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [category]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -43,6 +68,9 @@ export function Catalog() {
     if (category) search.set('category', category);
     if (q) search.set('q', q);
     if (inStock) search.set('in_stock', '1');
+    if (brand) search.set('brand', brand);
+    if (priceMin) search.set('price_min', String(Math.round(Number(priceMin) * 100)));
+    if (priceMax) search.set('price_max', String(Math.round(Number(priceMax) * 100)));
 
     api<Page>(`/api/products?${search}`, { signal: controller.signal })
       .then((res) => {
@@ -55,7 +83,7 @@ export function Catalog() {
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [category, q, sort, inStock, page]);
+  }, [category, q, sort, inStock, brand, priceMin, priceMax, page]);
 
   function update(patch: Record<string, string | null>) {
     const next = new URLSearchParams(params);
@@ -101,6 +129,74 @@ export function Catalog() {
           <input type="checkbox" checked={inStock} onChange={(e) => update({ in_stock: e.target.checked ? '1' : null })} />
           In stock only
         </label>
+      </div>
+
+      <div
+        className="row gap-12 wrap-row"
+        style={{ marginBottom: 22, padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)' }}
+      >
+        {brands.length > 0 && (
+          <div className="field" style={{ minWidth: 160 }}>
+            <label htmlFor="f-brand" className="tiny dim">
+              Brand
+            </label>
+            <select id="f-brand" className="input" value={brand} onChange={(e) => update({ brand: e.target.value || null })}>
+              <option value="">All brands</option>
+              {brands.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="field" style={{ maxWidth: 130 }}>
+          <label htmlFor="f-min" className="tiny dim">
+            Min price (৳)
+          </label>
+          <input
+            id="f-min"
+            className="input"
+            type="number"
+            min="0"
+            inputMode="numeric"
+            value={minDraft}
+            onChange={(e) => setMinDraft(e.target.value)}
+            onBlur={() => update({ price_min: minDraft || null })}
+            onKeyDown={(e) => e.key === 'Enter' && update({ price_min: minDraft || null })}
+          />
+        </div>
+        <div className="field" style={{ maxWidth: 130 }}>
+          <label htmlFor="f-max" className="tiny dim">
+            Max price (৳)
+          </label>
+          <input
+            id="f-max"
+            className="input"
+            type="number"
+            min="0"
+            inputMode="numeric"
+            value={maxDraft}
+            onChange={(e) => setMaxDraft(e.target.value)}
+            onBlur={() => update({ price_max: maxDraft || null })}
+            onKeyDown={(e) => e.key === 'Enter' && update({ price_max: maxDraft || null })}
+          />
+        </div>
+
+        {(brand || priceMin || priceMax) && (
+          <button
+            className="btn ghost sm"
+            style={{ alignSelf: 'flex-end' }}
+            onClick={() => {
+              setMinDraft('');
+              setMaxDraft('');
+              update({ brand: null, price_min: null, price_max: null });
+            }}
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {error && <Empty icon="⚠️" title="Could not load products" hint={error} />}

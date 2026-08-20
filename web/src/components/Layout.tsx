@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { setCurrencySymbol } from '../lib/format';
-import { useCart, useTheme } from '../lib/store';
+import { useCart, useTheme, useWishlist } from '../lib/store';
 import type { Category, PageLink, StoreSettings } from '../lib/types';
 import { Logo } from './Logo';
 import { PaymentBadges } from './PaymentBadges';
@@ -24,6 +24,7 @@ export function Layout() {
   const [query, setQuery] = useState(params.get('q') ?? '');
   const [menuOpen, setMenuOpen] = useState(false);
   const cart = useCart();
+  const wishlist = useWishlist();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -133,6 +134,13 @@ export function Layout() {
             >
               <span aria-hidden="true">{theme === 'dark' ? '☀️' : '🌙'}</span>
             </button>
+            <NavLink to="/account" className={({ isActive }) => `icon-btn only-lg ${isActive ? 'active' : ''}`}>
+              <span aria-hidden="true">{wishlist.ids.size > 0 ? '♥' : '♡'}</span>
+              <span className="hide-sm">Wishlist</span>
+              {wishlist.ids.size > 0 && (
+                <span className="cart-count">{wishlist.ids.size > 99 ? '99+' : wishlist.ids.size}</span>
+              )}
+            </NavLink>
             <NavLink to="/cart" className={({ isActive }) => `icon-btn ${isActive ? 'active' : ''}`}>
               <span aria-hidden="true">🛒</span>
               <span className="hide-sm">Cart</span>

@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { CustomerClaims, Env, Variables } from '../types';
-import { badRequest, conflict, notFound, optionalString, readJson, requireString, unauthorized } from '../lib/http';
+import { badRequest, conflict, notFound, optionalString, readJson, requireInt, requireString, unauthorized } from '../lib/http';
 import { hashPassword, randomSalt, signToken, verifyPassword, verifyToken } from '../lib/auth';
 import { digitsSql, normalisePhone, phoneVariants, validPhone } from '../lib/phone';
+import { PRODUCT_COLUMNS, loadTiers, toPublicProduct, type ProductRow } from '../lib/catalog';
 
 const SESSION_DAYS = 30;
 
@@ -195,4 +196,68 @@ account.get('/orders/:orderNo', async (c) => {
     .all();
 
   return c.json({ order, items: results ?? [] });
+});
+
+/* ══════════════════════════ wishlist ══════════════════════════
+ *
+ * Saved-for-later, nothing more — adding a product here books nothing and
+ * reserves no stock. Requires a signed-in account: there is no phone-plus-
+ * order pattern to lean on the way reviews and tracking do, because a
+ * wishlist has no order behind it yet.
+ */
+
+/** Product ids only — cheap enough to fetch on every page load so a heart icon can show filled/empty instantly. */
+account.get('/wishlist/ids', async (c) => {
+  const me = c.get('customer');
+  const { results } = await c.env.DB.prepare('SELECT product_id FROM wishlist_items WHERE customer_id = ?')
+    .bind(me.sub)
+    .all<{ product_id: number }>();
+  return c.json({ product_ids: (results ?? []).map((r) => r.product_id) });
+});
+
+/** The full wishlist, as real product cards — for the Wishlist page itself. */
+account.get('/wishlist', async (c) => {
+  const me = c.get('customer');
+  const { results } = await c.env.DB.prepare(
+    `SELECT ${PRODUCT_COLUMNS}, w.created_at AS saved_at
+       FROM wishlist_items w
+       JOIN products p ON p.id = w.product_id
+       LEFT JOIN categories c ON c.id = p.category_id
+      WHERE w.customer_id = ?
+      ORDER BY w.created_at DESC`,
+  )
+    .bind(me.sub)
+    .all<ProductRow & { saved_at: number }>();
+
+  const rows = results ?? [];
+  const tiers = await loadTiers(c.env, rows.map((r) => r.id));
+  return c.json({
+    products: rows.map((row) => ({ ...toPublicProduct(row, tiers.get(row.id) ?? []), saved_at: row.saved_at })),
+  });
+});
+
+account.post('/wishlist', async (c) => {
+  const me = c.get('customer');
+  const body = await readJson(c);
+  const productId = requireInt(body.product_id, 'product_id', 1);
+
+  const product = await c.env.DB.prepare('SELECT id FROM products WHERE id = ?').bind(productId).first();
+  if (!product) notFound('Product not found');
+
+  // INSERT OR IGNORE: saving something already saved is a no-op, not an error —
+  // a shopper double-tapping the heart should never see a failure toast.
+  await c.env.DB.prepare('INSERT OR IGNORE INTO wishlist_items (customer_id, product_id) VALUES (?, ?)')
+    .bind(me.sub, productId)
+    .run();
+
+  return c.json({ ok: true }, 201);
+});
+
+account.delete('/wishlist/:productId', async (c) => {
+  const me = c.get('customer');
+  const productId = Number(c.req.param('productId'));
+  await c.env.DB.prepare('DELETE FROM wishlist_items WHERE customer_id = ? AND product_id = ?')
+    .bind(me.sub, productId)
+    .run();
+  return c.json({ ok: true });
 });

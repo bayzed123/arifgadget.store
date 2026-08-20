@@ -1,14 +1,29 @@
+import type { MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Product } from '../lib/types';
 import { money } from '../lib/format';
 import { ProductThumb } from './ProductThumb';
-import { setDirectBuy, useCart } from '../lib/store';
+import { setDirectBuy, useCart, useCustomer, useWishlist } from '../lib/store';
 import { trackAddToCart, trackSelectItem } from '../lib/analytics';
 
 export function ProductCard({ product }: { product: Product }) {
   const cart = useCart();
   const navigate = useNavigate();
+  const wishlist = useWishlist();
+  const { customer } = useCustomer();
   const hasTiers = product.tiers.length > 0;
+  const saved = wishlist.has(product.id);
+
+  /** Guest shoppers get sent to sign in rather than a form they can't submit. */
+  function toggleWishlist(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!customer) {
+      navigate('/account');
+      return;
+    }
+    void wishlist.toggle(product.id);
+  }
 
   /** Straight to checkout with this item only — the cart is left untouched. */
   function buyNow() {
@@ -30,6 +45,15 @@ export function ProductCard({ product }: { product: Product }) {
         {product.discount_pct > 0 && <span className="ribbon">-{product.discount_pct}%</span>}
         {product.featured && product.discount_pct === 0 && <span className="ribbon gold">Featured</span>}
         {!product.in_stock && <span className="soldout">Sold out</span>}
+        <button
+          type="button"
+          className={`wish-btn${saved ? ' is-saved' : ''}`}
+          onClick={toggleWishlist}
+          aria-pressed={saved}
+          aria-label={saved ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
+        >
+          {saved ? '♥' : '♡'}
+        </button>
         <ProductThumb name={product.name} imageUrl={product.image_url} category={product.category?.slug} />
       </Link>
 

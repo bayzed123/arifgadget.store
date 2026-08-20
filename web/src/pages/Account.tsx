@@ -2,10 +2,11 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { dateTime, money, number, orderStatus, ORDER_STATUS_TONE } from '../lib/format';
-import { useCustomer, useToast } from '../lib/store';
+import { useCustomer, useToast, useWishlist } from '../lib/store';
 import { trackLogin, trackSignUp } from '../lib/analytics';
-import type { PressItem } from '../lib/types';
+import type { PressItem, Product } from '../lib/types';
 import { Empty, Spinner } from '../components/ui';
+import { ProductCard } from '../components/ProductCard';
 
 interface MyOrder {
   order_no: string;
@@ -145,6 +146,50 @@ function AuthPanel() {
   );
 }
 
+/** Saved products, using the same card as everywhere else — the wishlist should look and act just like a catalog page. */
+function WishlistSection() {
+  const wishlist = useWishlist();
+  const [products, setProducts] = useState<Product[] | null>(null);
+
+  useEffect(() => {
+    api<{ products: Product[] }>('/api/account/wishlist', { customerAuth: true })
+      .then((res) => setProducts(res.products))
+      .catch(() => setProducts([]));
+    // Re-fetch whenever a heart is toggled anywhere on the site, including on
+    // one of these same cards — that's what makes "remove" work from here.
+  }, [wishlist.ids]);
+
+  if (!wishlist.ready || products === null) return null;
+  if (products.length === 0) {
+    return (
+      <div className="panel" style={{ marginBottom: 20 }}>
+        <div className="panel-head">
+          <h3>Your wishlist</h3>
+        </div>
+        <div className="panel-body">
+          <Empty icon="♡" title="Nothing saved yet" hint="Tap the heart on any product to save it here." />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <section style={{ marginBottom: 28 }}>
+      <div className="section-head">
+        <div>
+          <div className="rule" />
+          <h2 style={{ fontSize: '1.15rem' }}>Your wishlist ({products.length})</h2>
+        </div>
+      </div>
+      <div className="prod-grid">
+        {products.map((product) => (
+          <ProductCard key={product.id} product={product} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** Signed-in view: profile, offers and order history. */
 function Dashboard() {
   const { customer, signOut, refresh } = useCustomer();
@@ -217,6 +262,8 @@ function Dashboard() {
           ))}
         </div>
       )}
+
+      <WishlistSection />
 
       <div className="cart-layout">
         <div className="panel">

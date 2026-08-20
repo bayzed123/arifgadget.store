@@ -300,6 +300,97 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
   return <CustomerCtx.Provider value={value}>{children}</CustomerCtx.Provider>;
 }
 
+/* ============================================================ wishlist */
+
+/**
+ * Saved-for-later, server-backed rather than local like the cart — a
+ * wishlist someone expects to see again on their next phone or after
+ * reinstalling the browser, the way it works on every shop that has one.
+ * That means it only exists for a signed-in customer; there is no
+ * phone-plus-order pattern to fall back on the way reviews and tracking do,
+ * because a wishlist has nothing behind it yet to prove ownership with.
+ */
+interface WishlistApi {
+  /** Product ids currently saved. Empty and harmless to read while signed out. */
+  ids: Set<number>;
+  ready: boolean;
+  has: (productId: number) => boolean;
+  /** Returns false (and does nothing) when nobody is signed in — the caller decides how to prompt sign-in. */
+  toggle: (productId: number) => Promise<boolean>;
+}
+
+const WishlistCtx = createContext<WishlistApi>({
+  ids: new Set(),
+  ready: false,
+  has: () => false,
+  toggle: async () => false,
+});
+
+export const useWishlist = () => useContext(WishlistCtx);
+
+export function WishlistProvider({ children }: { children: ReactNode }) {
+  const { customer, ready: customerReady } = useCustomer();
+  const toast = useToast();
+  const [ids, setIds] = useState<Set<number>>(new Set());
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!customerReady) return;
+    if (!customer) {
+      setIds(new Set());
+      setReady(true);
+      return;
+    }
+    setReady(false);
+    api<{ product_ids: number[] }>('/api/account/wishlist/ids', { customerAuth: true })
+      .then((res) => setIds(new Set(res.product_ids)))
+      .catch(() => setIds(new Set()))
+      .finally(() => setReady(true));
+  }, [customer, customerReady]);
+
+  const toggle = useCallback(
+    async (productId: number) => {
+      if (!customer) return false;
+
+      const saved = ids.has(productId);
+      // Optimistic: a heart icon that waits for a round trip before it fills
+      // in feels broken, and undoing it on a rare failure is one line.
+      setIds((prev) => {
+        const next = new Set(prev);
+        if (saved) next.delete(productId);
+        else next.add(productId);
+        return next;
+      });
+
+      try {
+        if (saved) {
+          await api(`/api/account/wishlist/${productId}`, { method: 'DELETE', customerAuth: true });
+        } else {
+          await api('/api/account/wishlist', { method: 'POST', customerAuth: true, body: { product_id: productId } });
+        }
+        return true;
+      } catch {
+        setIds((prev) => {
+          const next = new Set(prev);
+          if (saved) next.add(productId);
+          else next.delete(productId);
+          return next;
+        });
+        toast('Could not update your wishlist — try again', 'error');
+        return false;
+      }
+    },
+    [customer, ids, toast],
+  );
+
+  const value = useMemo<WishlistApi>(
+    () => ({ ids, ready, has: (id) => ids.has(id), toggle }),
+    [ids, ready, toggle],
+  );
+
+  return <WishlistCtx.Provider value={value}>{children}</WishlistCtx.Provider>;
+}
+
 /* ============================================================ admin session */
 
 interface AuthApi {
