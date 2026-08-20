@@ -2,7 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { dateTime, money } from '../../lib/format';
 import { useAuth, useToast } from '../../lib/store';
-import { Empty, Spinner } from '../../components/ui';
+import { Empty, Spinner, ConfirmDialog } from '../../components/ui';
+import { CourierBanner } from '../../components/CourierBanner';
+import type { CourierAccount, CourierConnection, CourierPayment } from '../../lib/types';
 
 interface AuditEntry {
   id: number;
@@ -39,6 +41,303 @@ const LABELS: Record<string, { label: string; hint: string }> = {
   free_shipping_over: { label: 'Free delivery over (৳)', hint: 'Order value that unlocks free delivery' },
   tax_pct: { label: 'Tax percentage', hint: 'Applied to the net order value. 0 disables it.' },
 };
+
+/**
+ * The shop runs more than one Steadfast account. This panel lets staff add,
+ * switch and remove them without touching a GitHub secret or waiting on a
+ * redeploy — a key typed in here works on the very next courier call. Keys
+ * are encrypted before they reach the database and this panel never gets one
+ * back after saving, matching the same never-show-a-character rule the
+ * courier banner already followed for the single deploy-secret account.
+ */
+function CourierAccountsPanel({ canEdit }: { canEdit: boolean }) {
+  const toast = useToast();
+  const [status, setStatus] = useState<CourierConnection | null>(null);
+  const [accounts, setAccounts] = useState<CourierAccount[]>([]);
+  const [payments, setPayments] = useState<CourierPayment[]>([]);
+  const [paymentsError, setPaymentsError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<number | 'new' | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<CourierAccount | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ label: '', api_key: '', secret_key: '', base_url: '' });
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [statusRes, accountsRes, paymentsRes] = await Promise.all([
+        api<CourierConnection>('/api/admin/courier', { auth: true }),
+        api<{ accounts: CourierAccount[] }>('/api/admin/courier/accounts', { auth: true }),
+        api<{ ok: boolean; error: string; payments: CourierPayment[] }>('/api/admin/courier/payments', { auth: true }),
+      ]);
+      setStatus(statusRes);
+      setAccounts(accountsRes.accounts);
+      setPaymentsError(paymentsRes.ok ? '' : paymentsRes.error);
+      setPayments(paymentsRes.payments);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not load courier accounts', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function addAccount(event: FormEvent) {
+    event.preventDefault();
+    if (!form.label.trim() || !form.api_key.trim() || !form.secret_key.trim()) {
+      toast('Fill in a label, API key and secret key', 'error');
+      return;
+    }
+    setBusyId('new');
+    try {
+      await api('/api/admin/courier/accounts', {
+        method: 'POST',
+        auth: true,
+        body: {
+          label: form.label.trim(),
+          api_key: form.api_key.trim(),
+          secret_key: form.secret_key.trim(),
+          base_url: form.base_url.trim(),
+        },
+      });
+      toast(`"${form.label.trim()}" added`, 'success');
+      setForm({ label: '', api_key: '', secret_key: '', base_url: '' });
+      setShowAdd(false);
+      await load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not add the account', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function activate(account: CourierAccount) {
+    setBusyId(account.id);
+    try {
+      await api(`/api/admin/courier/accounts/${account.id}/activate`, { method: 'POST', auth: true });
+      toast(`"${account.label}" is now the active account`, 'success');
+      await load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not switch accounts', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove() {
+    if (!removeTarget) return;
+    setBusyId(removeTarget.id);
+    try {
+      await api(`/api/admin/courier/accounts/${removeTarget.id}`, { method: 'DELETE', auth: true });
+      toast(`"${removeTarget.label}" removed`, 'success');
+      setRemoveTarget(null);
+      await load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not remove the account', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Courier accounts</h3>
+          <p className="tiny dim">
+            Steadfast can hold more than one account here — whichever is marked active books every new parcel.
+          </p>
+        </div>
+        {canEdit && (
+          <button className="btn ghost sm" onClick={() => setShowAdd((v) => !v)}>
+            {showAdd ? 'Cancel' : '+ Add account'}
+          </button>
+        )}
+      </div>
+      <div className="panel-body stack gap-16">
+        {loading ? (
+          <Spinner />
+        ) : (
+          <>
+            <CourierBanner
+              state={status}
+              action={
+                <button className="btn ghost sm" onClick={load}>
+                  Refresh
+                </button>
+              }
+            />
+
+            {showAdd && canEdit && (
+              <form
+                className="stack gap-12"
+                onSubmit={addAccount}
+                style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', padding: 16 }}
+              >
+                <div className="form-grid">
+                  <div className="field">
+                    <label htmlFor="ca-label">Label</label>
+                    <input
+                      id="ca-label"
+                      className="input"
+                      placeholder="e.g. Main account, Second account"
+                      value={form.label}
+                      onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="ca-api">API key</label>
+                    <input
+                      id="ca-api"
+                      className="input"
+                      type="password"
+                      autoComplete="off"
+                      value={form.api_key}
+                      onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="ca-secret">Secret key</label>
+                    <input
+                      id="ca-secret"
+                      className="input"
+                      type="password"
+                      autoComplete="off"
+                      value={form.secret_key}
+                      onChange={(e) => setForm((f) => ({ ...f, secret_key: e.target.value }))}
+                    />
+                    <span className="hint">
+                      From the Steadfast merchant portal → API Support. Stored encrypted — nobody, including this
+                      dashboard, can read it back afterwards.
+                    </span>
+                  </div>
+                </div>
+                <button className="btn primary" type="submit" disabled={busyId === 'new'}>
+                  {busyId === 'new' ? 'Adding…' : 'Add account'}
+                </button>
+              </form>
+            )}
+
+            {accounts.length === 0 ? (
+              <Empty
+                icon="🚚"
+                title="No accounts added yet"
+                hint={
+                  canEdit
+                    ? 'Add one above, or the shop keeps using whatever was set as a Worker secret at deploy time.'
+                    : undefined
+                }
+              />
+            ) : (
+              <div className="table-scroll">
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>Account</th>
+                      <th>Keys</th>
+                      <th></th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accounts.map((a) => (
+                      <tr key={a.id}>
+                        <td>
+                          <strong>{a.label}</strong>
+                          {a.active && (
+                            <span className="badge ok" style={{ marginLeft: 8 }}>
+                              Active
+                            </span>
+                          )}
+                        </td>
+                        <td className="tiny dim mono">
+                          API {a.api_key_present ? `${a.api_key_length} chars` : 'missing'} · Secret{' '}
+                          {a.secret_key_present ? `${a.secret_key_length} chars` : 'missing'}
+                        </td>
+                        <td>
+                          {!a.active && canEdit && (
+                            <button className="btn ghost sm" disabled={busyId !== null} onClick={() => activate(a)}>
+                              {busyId === a.id ? 'Switching…' : 'Make active'}
+                            </button>
+                          )}
+                        </td>
+                        <td>
+                          {canEdit && (
+                            <button
+                              className="btn danger sm"
+                              disabled={busyId !== null}
+                              onClick={() => setRemoveTarget(a)}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div>
+              <h4 style={{ marginBottom: 8 }}>Courier payments</h4>
+              <p className="tiny dim" style={{ marginBottom: 10 }}>
+                Real money Steadfast has remitted to the shop for delivered COD parcels — separate from the running
+                balance above.
+              </p>
+              {paymentsError ? (
+                <div className="alert warn small">{paymentsError}</div>
+              ) : payments.length === 0 ? (
+                <Empty icon="💰" title="No payments recorded by Steadfast yet" />
+              ) : (
+                <div className="table-scroll">
+                  <table className="data">
+                    <thead>
+                      <tr>
+                        <th>Reference</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Paid</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payments.map((p, i) => (
+                        <tr key={p.reference || i}>
+                          <td className="mono small">{p.reference || '—'}</td>
+                          {/* Steadfast reports this in taka directly — unlike every amount stored in this
+                              shop's own database, it never passed through the poisha conversion, so it is
+                              formatted here rather than with the money() helper. */}
+                          <td>৳{p.amount.toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td>
+                            <span className="badge info">{p.status || '—'}</span>
+                          </td>
+                          <td className="tiny dim">{p.paidAt || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={removeTarget !== null}
+        title={`Remove "${removeTarget?.label}"?`}
+        message="This deletes the stored keys for this account. Orders already booked through it keep their own record — nothing about past deliveries changes."
+        busy={busyId === removeTarget?.id}
+        onConfirm={remove}
+        onCancel={() => setRemoveTarget(null)}
+      />
+    </div>
+  );
+}
 
 export function Settings() {
   const { admin } = useAuth();
@@ -195,6 +494,10 @@ export function Settings() {
             )}
           </div>
         </div>
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <CourierAccountsPanel canEdit={canEdit} />
       </div>
     </>
   );

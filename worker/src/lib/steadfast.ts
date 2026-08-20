@@ -21,6 +21,7 @@
  */
 
 import { normalisePhone } from './phone';
+import { decryptSecret } from './crypto';
 import type { Env } from '../types';
 
 const DEFAULT_BASE = 'https://portal.packzy.com/api/v1';
@@ -111,33 +112,110 @@ interface Credentials {
   apiKey: string;
   secretKey: string;
   base: string;
+  /** Which `courier_accounts` row this came from, or null for the legacy deploy-secret account. */
+  accountId: number | null;
+  /** For messages and the dashboard — never the key itself. */
+  label: string;
 }
 
-function credentials(env: Env): Credentials | null {
+interface AccountRow {
+  id: number;
+  label: string;
+  api_key_enc: string;
+  secret_key_enc: string;
+  api_key_length: number;
+  secret_key_length: number;
+  base_url: string;
+}
+
+/**
+ * Which credentials to use, in order: the account staff have marked active in
+ * Settings, then the original single Worker-secret account from the deploy.
+ *
+ * The fallback matters for every shop that had Steadfast connected before
+ * accounts existed in the database at all — nothing breaks and nothing needs
+ * re-entering just because this table now exists. Once an account is added
+ * from Settings and made active, it takes over from the deploy secret.
+ */
+async function resolveAccount(env: Env): Promise<Credentials | null> {
+  const row = await env.DB.prepare(
+    `SELECT id, label, api_key_enc, secret_key_enc, api_key_length, secret_key_length, base_url
+       FROM courier_accounts WHERE provider = 'steadfast' AND is_active = 1 LIMIT 1`,
+  ).first<AccountRow>();
+
+  if (row) {
+    // Decrypting needs JWT_SECRET, which every admin route already depends on
+    // to issue and check sessions — if it is missing, staff could not have
+    // signed in to add this account in the first place, so this is treated
+    // the same as no account being configured rather than a distinct error.
+    if (!env.JWT_SECRET) return null;
+    const [apiKey, secretKey] = await Promise.all([
+      decryptSecret(env.JWT_SECRET, row.api_key_enc),
+      decryptSecret(env.JWT_SECRET, row.secret_key_enc),
+    ]);
+    return {
+      apiKey,
+      secretKey,
+      base: (row.base_url.trim() || DEFAULT_BASE).replace(/\/$/, ''),
+      accountId: row.id,
+      label: row.label,
+    };
+  }
+
   const apiKey = env.STEADFAST_API_KEY?.trim();
   const secretKey = env.STEADFAST_SECRET_KEY?.trim();
   if (!apiKey || !secretKey) return null;
-  return { apiKey, secretKey, base: (env.STEADFAST_BASE_URL?.trim() || DEFAULT_BASE).replace(/\/$/, '') };
+  return {
+    apiKey,
+    secretKey,
+    base: (env.STEADFAST_BASE_URL?.trim() || DEFAULT_BASE).replace(/\/$/, ''),
+    accountId: null,
+    label: 'Deploy secret',
+  };
 }
 
-/** True when the Worker has both keys. Lets the UI say "not connected" instead of failing. */
-export const courierConfigured = (env: Env): boolean => credentials(env) !== null;
+/** True when some account — dashboard-added or the legacy deploy secret — is usable. Lets the UI say "not connected" instead of failing. */
+export async function courierConfigured(env: Env): Promise<boolean> {
+  return (await resolveAccount(env)) !== null;
+}
 
 /**
- * What the dashboard is allowed to know about the credentials.
+ * What the dashboard is allowed to know about the active credentials.
  *
  * Which keys exist and how long they are — never a character of their value.
  * The length is what separates "the secret is missing" from "the secret holds
  * the wrong thing", and it was the missing fact that made a rejected key
- * indistinguishable from an unset one.
+ * indistinguishable from an unset one. For a dashboard-added account this
+ * comes straight from the stored length columns, so checking it never needs
+ * to decrypt a key just to report its size.
  */
-export function credentialShape(env: Env): {
+export async function credentialShape(env: Env): Promise<{
   api_key_present: boolean;
   secret_key_present: boolean;
   api_key_length: number;
   secret_key_length: number;
   base_url: string;
-} {
+  account_label: string;
+  /** Where the active credentials came from — Settings, or the original deploy secret. */
+  source: 'dashboard' | 'legacy' | 'none';
+}> {
+  const row = await env.DB.prepare(
+    `SELECT label, api_key_length, secret_key_length, base_url
+       FROM courier_accounts WHERE provider = 'steadfast' AND is_active = 1 LIMIT 1`,
+  ).first<{ label: string; api_key_length: number; secret_key_length: number; base_url: string }>();
+
+  if (row) {
+    return {
+      api_key_present: row.api_key_length > 0,
+      secret_key_present: row.secret_key_length > 0,
+      api_key_length: row.api_key_length,
+      secret_key_length: row.secret_key_length,
+      base_url: (row.base_url.trim() || DEFAULT_BASE).replace(/\/$/, ''),
+      account_label: row.label,
+      source: 'dashboard',
+    };
+  }
+
   const apiKey = env.STEADFAST_API_KEY?.trim() ?? '';
   const secretKey = env.STEADFAST_SECRET_KEY?.trim() ?? '';
   return {
@@ -146,17 +224,19 @@ export function credentialShape(env: Env): {
     api_key_length: apiKey.length,
     secret_key_length: secretKey.length,
     base_url: (env.STEADFAST_BASE_URL?.trim() || DEFAULT_BASE).replace(/\/$/, ''),
+    account_label: apiKey ? 'Deploy secret' : '',
+    source: apiKey ? 'legacy' : 'none',
   };
 }
 
 /* ─────────────────────────── transport ─────────────────────────── */
 
 async function call<T>(env: Env, path: string, init?: { method: string; body: unknown }): Promise<CourierResult<T>> {
-  const creds = credentials(env);
+  const creds = await resolveAccount(env);
   if (!creds) {
     return {
       ok: false,
-      error: 'Steadfast is not connected. Add STEADFAST_API_KEY and STEADFAST_SECRET_KEY as Worker secrets.',
+      error: 'Steadfast is not connected. Add an account from Settings → Courier accounts, or set STEADFAST_API_KEY and STEADFAST_SECRET_KEY as Worker secrets.',
     };
   }
 
@@ -338,4 +418,66 @@ export async function courierBalance(env: Env): Promise<CourierResult<number>> {
   const result = await call<{ current_balance?: number }>(env, '/get_balance');
   if (!result.ok) return result;
   return { ok: true, data: Number(result.data?.current_balance ?? 0) };
+}
+
+/** Which `courier_accounts` row is currently used to talk to Steadfast, or null for the legacy deploy secret / not connected. */
+export async function activeCourierAccountId(env: Env): Promise<number | null> {
+  const account = await resolveAccount(env);
+  return account?.accountId ?? null;
+}
+
+/** One remitted payment — what Steadfast has actually paid the shop for delivered COD parcels. */
+export interface CourierPayment {
+  reference: string;
+  amount: number;
+  status: string;
+  note: string;
+  paidAt: string;
+}
+
+/**
+ * The COD money Steadfast has actually settled to the shop — real bank
+ * deposits, not the single running balance figure. Steadfast's own response
+ * shape here has not been confirmed against this shop's live account yet
+ * (their public docs describe it, but a payments history is only observable
+ * with a real, funded account), so this is deliberately defensive: it accepts
+ * several plausible field names and layouts, and if none of them match it
+ * fails with the raw keys it actually saw rather than ever showing an invented
+ * number. The same "never fabricate, always name the real problem" rule the
+ * rest of this file follows for a 401.
+ */
+export async function courierPayments(env: Env): Promise<CourierResult<CourierPayment[]>> {
+  const result = await call<unknown>(env, '/payments');
+  if (!result.ok) return result;
+
+  const payload = result.data;
+  const rows: unknown[] | null = Array.isArray(payload)
+    ? payload
+    : Array.isArray((payload as { data?: unknown })?.data)
+      ? ((payload as { data: unknown[] }).data)
+      : Array.isArray((payload as { payments?: unknown })?.payments)
+        ? ((payload as { payments: unknown[] }).payments)
+        : null;
+
+  if (!rows) {
+    const keys = payload && typeof payload === 'object' ? Object.keys(payload as object).join(', ') : typeof payload;
+    return {
+      ok: false,
+      error: `Steadfast's payment list came back in a shape this dashboard does not recognise (top-level keys: ${keys || 'none'}). Nothing was invented in its place — this needs checking against a real response.`,
+    };
+  }
+
+  const payments: CourierPayment[] = rows.map((raw) => {
+    const r = raw as Record<string, unknown>;
+    const amount = r.amount ?? r.paid_amount ?? r.cod_amount ?? r.total_amount;
+    return {
+      reference: String(r.invoice ?? r.trx_id ?? r.transaction_id ?? r.reference ?? r.id ?? ''),
+      amount: typeof amount === 'number' ? amount : Number(amount) || 0,
+      status: String(r.status ?? r.payment_status ?? ''),
+      note: String(r.note ?? r.remarks ?? ''),
+      paidAt: String(r.paid_at ?? r.payment_date ?? r.created_at ?? r.date ?? ''),
+    };
+  });
+
+  return { ok: true, data: payments };
 }

@@ -96,6 +96,8 @@ export function Orders() {
             api_key_length: 0,
             secret_key_length: 0,
             base_url: '',
+            account_label: '',
+            source: 'none',
           },
         }),
       );
