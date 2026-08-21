@@ -23,7 +23,7 @@ import { googleConfigured } from './googleAuth';
 import { ga4Summary } from './googleAnalytics';
 import { searchConsoleSummary } from './searchConsole';
 import { gtmSummary, GTM_PUBLIC_ID } from './googleTagManager';
-import { appendToDocument } from './googleDocs';
+import { appendFormattedReport, type DocSection } from './googleDocs';
 import { appendLogRow } from './googleSheets';
 import { courierConfigured, courierBalance } from './steadfast';
 
@@ -203,29 +203,108 @@ async function gatherSignals(env: Env): Promise<Record<string, unknown>> {
 }
 
 const RULES = `
-You are the weekly Developer & Operations report writer for Arif Gadgets, a Bangladeshi e-commerce platform. Your reader is the developer/owner — comfortable with both technical and business language. You are given real signals about the last 7 days as JSON. Write one clear, well-organised report.
+You are the weekly Developer & Operations report writer for Arif Gadgets, a Bangladeshi e-commerce platform. Your reader is the developer/owner — comfortable with both technical and business language. You are given real signals about the last 7 days as JSON. Respond with ONLY one JSON object (no markdown, no code fences, no commentary before or after) matching exactly this shape:
 
-Cover, in this order, using headings:
-1. Overall this week — sales trend (this week vs the prior week), stock and rating health, in a couple of lines.
-2. Website performance & search — GA4 traffic/conversions and Search Console clicks/impressions this week if connected, and what the Tag Manager container looks like. If not connected, say so plainly instead of guessing.
-3. Errors & reliability — what broke this week (from errors_this_week), how often, and whether it looks worth fixing.
-4. The AI features (admin assistant, support chat, daily health check, and this report itself) — usage and error rate this week, from gemini_features_usage_this_week. Call out anything that looks like a rate limit (a "quota"/"RESOURCE_EXHAUSTED"/429-style message) explicitly — it will fix itself once Google's limit resets, so say that plainly rather than treating it as broken.
-5. Admin/staff activity — who did what this week, from admin_staff_activity_this_week. If it is empty, say plainly that no staff activity was recorded this week rather than inventing any.
-6. Compared with last week's report (last_weeks_report) — note anything recurring across both weeks, or that changed. If there is no prior report, say this is the first one.
-7. A short, prioritised action list — the 3 to 5 things most worth doing next, most important first. If genuinely nothing needs attention, say so — do not manufacture busy-work.
+{
+  "status": "ok" | "warning" | "error",
+  "overall": string,
+  "website_performance": string,
+  "errors_reliability": string,
+  "ai_features": string,
+  "staff_activity": string,
+  "compared_to_last_week": string,
+  "action_items": string[]
+}
+
+What goes in each field:
+- status: "ok" if nothing needs action, "warning" if something should be looked at this week but nothing is broken, "error" if something appears broken and needs attention soon.
+- overall: sales trend (this week vs the prior week), stock and rating health — a couple of sentences.
+- website_performance: GA4 traffic/conversions and Search Console clicks/impressions this week if connected, and what the Tag Manager container looks like. If not connected, say so plainly instead of guessing.
+- errors_reliability: what broke this week (from errors_this_week), how often, and whether it looks worth fixing.
+- ai_features: usage and error rate this week for the admin assistant, support chat, daily health check, and this report itself, from gemini_features_usage_this_week. Call out anything that looks like a rate limit (a "quota"/"RESOURCE_EXHAUSTED"/429-style message) explicitly — it will fix itself once Google's limit resets, so say that plainly rather than treating it as broken.
+- staff_activity: who did what this week, from admin_staff_activity_this_week. If it is empty, say plainly that no staff activity was recorded this week rather than inventing any.
+- compared_to_last_week: anything recurring across both weeks, or that changed, from last_weeks_report. If there is no prior report, say this is the first one.
+- action_items: 3 to 5 short, prioritised, most-important-first strings — the things most worth doing next. If genuinely nothing needs attention, return a single item saying so rather than manufacturing busy-work.
 
 Rules:
 - Base every claim ONLY on the JSON given. Never invent a number, an error, a behaviour, or a comparison that is not represented in the data.
 - Write in Bangla and English mixed, direct and practical — not corporate, and not padded.
-- Use clear headings (the report is read both in a Google Doc and skimmed on a phone).
-- End with exactly one of these on its own final line, matching your overall verdict: [STATUS: ok] nothing needs action, [STATUS: warning] something should be looked at this week but nothing is broken, or [STATUS: error] something appears broken and needs attention soon.
+- Plain sentences only in every string field — no markdown syntax (no #, no **, no leading "- ") anywhere in the output; this JSON is rendered directly into a formatted Google Doc and a spreadsheet cell, which do not interpret markdown.
 `.trim();
 
-function parseStatus(reply: string): { status: DevReportStatus; summary: string } {
-  const match = reply.match(/\[STATUS:\s*(ok|warning|error)\]/i);
-  const status = (match?.[1]?.toLowerCase() as DevReportStatus | undefined) ?? 'warning';
-  const summary = reply.replace(/\[STATUS:\s*(ok|warning|error)\]\s*$/i, '').trim();
-  return { status, summary };
+interface ReportJson {
+  status: DevReportStatus;
+  overall: string;
+  website_performance: string;
+  errors_reliability: string;
+  ai_features: string;
+  staff_activity: string;
+  compared_to_last_week: string;
+  action_items: string[];
+}
+
+/** Belt and suspenders: strips markdown syntax even though the prompt already asks Gemini not to use it. */
+function plain(s: string): string {
+  return String(s ?? '')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/^[-*]\s+/gm, '')
+    .trim();
+}
+
+/**
+ * Parses Gemini's JSON reply into the report's sections. Falls back to
+ * treating the whole reply as the "overall" section (still real, still
+ * Gemini's own words — never fabricated) if it did not come back as the
+ * requested JSON shape, so one malformed reply degrades gracefully instead
+ * of losing the report entirely.
+ */
+function parseReport(reply: string): ReportJson {
+  try {
+    const cleaned = reply.trim().replace(/^```json\s*/i, '').replace(/```$/i, '');
+    const parsed = JSON.parse(cleaned) as Partial<ReportJson>;
+    const status: DevReportStatus = parsed.status === 'ok' || parsed.status === 'error' ? parsed.status : 'warning';
+    return {
+      status,
+      overall: plain(parsed.overall ?? ''),
+      website_performance: plain(parsed.website_performance ?? ''),
+      errors_reliability: plain(parsed.errors_reliability ?? ''),
+      ai_features: plain(parsed.ai_features ?? ''),
+      staff_activity: plain(parsed.staff_activity ?? ''),
+      compared_to_last_week: plain(parsed.compared_to_last_week ?? ''),
+      action_items: Array.isArray(parsed.action_items) ? parsed.action_items.map((s) => plain(String(s))).filter(Boolean) : [],
+    };
+  } catch {
+    return {
+      status: 'warning',
+      overall: plain(reply),
+      website_performance: '',
+      errors_reliability: '',
+      ai_features: '',
+      staff_activity: '',
+      compared_to_last_week: '',
+      action_items: [],
+    };
+  }
+}
+
+const SECTION_TITLES: Record<Exclude<keyof ReportJson, 'status' | 'action_items'>, string> = {
+  overall: 'Overall this week',
+  website_performance: 'Website performance & search',
+  errors_reliability: 'Errors & reliability',
+  ai_features: 'AI features',
+  staff_activity: 'Admin/staff activity',
+  compared_to_last_week: "Compared with last week's report",
+};
+
+/** A single readable plain-text block — used for the D1 record and next week's "last_weeks_report" context, never for the Doc/Sheet (those get real formatting instead). */
+function plainTextSummary(report: ReportJson): string {
+  const parts = (Object.keys(SECTION_TITLES) as (keyof typeof SECTION_TITLES)[])
+    .map((key) => `${SECTION_TITLES[key]}: ${report[key]}`)
+    .filter((line) => !line.endsWith(': '));
+  if (report.action_items.length) parts.push(`Action items: ${report.action_items.join(' · ')}`);
+  return parts.join('\n\n');
 }
 
 /** Bangladesh is UTC+6 — the report is dated the way its reader will read it. */
@@ -256,7 +335,7 @@ export async function runDevReport(env: Env): Promise<DevReportResult> {
     'DEVLOPER_REPORT_GEMENI',
     RULES,
     [{ role: 'user', text: `SIGNALS FOR THE LAST 7 DAYS:\n${JSON.stringify(signals, null, 2)}` }],
-    { temperature: 0.3, maxOutputTokens: 3072 },
+    { temperature: 0.3, maxOutputTokens: 3072, responseMimeType: 'application/json' },
   );
 
   if (!result.ok) {
@@ -265,7 +344,13 @@ export async function runDevReport(env: Env): Promise<DevReportResult> {
     return { ok: false, status: null, summary: '', error: result.error, doc_written: false, sheet1_written: false, sheet2_written: false, checked_at: null };
   }
 
-  const { status, summary } = parseStatus(result.data);
+  const report = parseReport(result.data);
+  const { status } = report;
+  const summary = plainTextSummary(report);
+
+  const sections: DocSection[] = (Object.keys(SECTION_TITLES) as (keyof typeof SECTION_TITLES)[])
+    .map((key) => ({ heading: SECTION_TITLES[key], body: report[key] }))
+    .filter((s) => s.body);
 
   // Write to the Doc and both Sheets independently — one failing (a link not
   // shared with the service account yet, say) must never stop the others,
@@ -277,8 +362,11 @@ export async function runDevReport(env: Env): Promise<DevReportResult> {
 
   const docId = await settingValue(env, 'dev_report_doc_id');
   if (docId) {
-    const heading = `\n\n${'─'.repeat(60)}\nWeekly Developer Report — ${bdDateLabel(now)} — [${status.toUpperCase()}]\n${'─'.repeat(60)}\n\n${summary}\n`;
-    const written = await appendToDocument(env, docId, heading);
+    const written = await appendFormattedReport(env, docId, {
+      title: `Weekly Developer Report — ${bdDateLabel(now)} — ${status.toUpperCase()}`,
+      sections,
+      actionItems: report.action_items,
+    });
     if (written.ok) docWritten = true;
     else writeErrors.push(`Doc: ${written.error}`);
   }
@@ -290,9 +378,10 @@ export async function runDevReport(env: Env): Promise<DevReportResult> {
     (signals.sales_this_week as { revenue_taka: number }).revenue_taka,
     ((signals.errors_this_week as { admin_dashboard: number; storefront: number }).admin_dashboard ?? 0) +
       ((signals.errors_this_week as { admin_dashboard: number; storefront: number }).storefront ?? 0),
-    summary.slice(0, 2000),
+    report.overall,
+    report.action_items.join(' · '),
   ];
-  const header = ['Date', 'Status', 'Orders this week', 'Revenue this week (৳)', 'Errors this week', 'Summary'];
+  const header = ['Date', 'Status', 'Orders this week', 'Revenue this week (৳)', 'Errors this week', 'Overall summary', 'Action items'];
 
   const sheet1Id = await settingValue(env, 'dev_report_sheet1_id');
   if (sheet1Id) {

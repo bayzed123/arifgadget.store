@@ -116,10 +116,14 @@ export async function appendLogRow(
   const exists = (meta.data.sheets ?? []).some((s) => s.properties.title === sheetTitle);
 
   if (!exists) {
-    const created = await call(token, `/${spreadsheetId}:batchUpdate`, {
-      method: 'POST',
-      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: sheetTitle } } }] }),
-    });
+    const created = await call<{ replies?: { addSheet?: { properties?: { sheetId?: number } } }[] }>(
+      token,
+      `/${spreadsheetId}:batchUpdate`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: sheetTitle } } }] }),
+      },
+    );
     if (!created.ok) return created;
 
     const headerWrite = await call(token, `/${spreadsheetId}/values/${encodeURIComponent(`${sheetTitle}!A1`)}?valueInputOption=USER_ENTERED`, {
@@ -127,6 +131,28 @@ export async function appendLogRow(
       body: JSON.stringify({ values: [header] }),
     });
     if (!headerWrite.ok) return headerWrite;
+
+    // Bold header row + freeze it, so a growing log reads like a proper
+    // table from the first row rather than looking like a plain data dump.
+    // Cosmetic only — never lets a formatting hiccup block the real write.
+    const sheetId = created.data.replies?.[0]?.addSheet?.properties?.sheetId;
+    if (sheetId !== undefined) {
+      await call(token, `/${spreadsheetId}:batchUpdate`, {
+        method: 'POST',
+        body: JSON.stringify({
+          requests: [
+            {
+              repeatCell: {
+                range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
+                cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.93, green: 0.95, blue: 0.99 } } },
+                fields: 'userEnteredFormat(textFormat,backgroundColor)',
+              },
+            },
+            { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: 'gridProperties.frozenRowCount' } },
+          ],
+        }),
+      }).catch(() => undefined);
+    }
   }
 
   // `append` finds the next empty row itself — no need to track one.

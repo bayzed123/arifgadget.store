@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { number, relativeTime } from '../../lib/format';
-import { useAuth, useToast } from '../../lib/store';
+import { useToast } from '../../lib/store';
 import { Empty, Spinner, Stat } from '../../components/ui';
 
 /**
@@ -725,122 +725,7 @@ function HealthCheckPanel() {
   );
 }
 
-/* ─────────────────────────── Weekly developer report ─────────────────────────── */
-
-interface DevReportStatus {
-  configured: boolean;
-  doc_id: string;
-  sheet1_id: string;
-  sheet2_id: string;
-  status: 'ok' | 'warning' | 'error' | null;
-  summary: string;
-  checked_at: number | null;
-  error: string;
-}
-
-/**
- * A weekly "how did the whole platform do" report — sales trend, errors,
- * how the other three Gemini features are holding up, and real staff
- * activity from the audit log — written to a Google Doc and up to two
- * Google Sheets. Owner-only, deliberately: it reads staff activity, so
- * staff/admin accounts must never even see that this exists — the backend
- * route this panel calls (/dev-report/status, /dev-report/run) rejects
- * anyone but the owner, and this component is only ever mounted for one.
- * There's no destination-editing UI here on purpose either — the Doc/Sheet
- * links are set once by a migration, not something to reconfigure by hand.
- */
-function DevReportPanel() {
-  const toast = useToast();
-  const [report, setReport] = useState<DevReportStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
-
-  function load() {
-    setLoading(true);
-    api<DevReportStatus>('/api/admin/dev-report/status', { auth: true })
-      .then(setReport)
-      .catch(() => undefined)
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(load, []);
-
-  async function runNow() {
-    setRunning(true);
-    try {
-      const res = await api<{ ok: boolean; error: string }>('/api/admin/dev-report/run', { method: 'POST', auth: true });
-      if (res.ok) toast('Weekly report generated', 'success');
-      else toast(res.error, 'error');
-      load();
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : 'Could not run the report', 'error');
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  const alertClass = report?.status === 'ok' ? 'success' : report?.status === 'error' ? 'error' : 'warn';
-
-  return (
-    <div className="panel">
-      <div className="panel-head">
-        <div>
-          <h3>Weekly developer report 🔒</h3>
-          <p className="tiny dim">Owner only. Sales, errors, AI feature health &amp; staff activity — written every Monday.</p>
-        </div>
-        {report?.configured && (
-          <button className="btn ghost sm" disabled={running} onClick={runNow}>
-            {running ? 'Writing…' : 'Run now'}
-          </button>
-        )}
-      </div>
-      <div className="panel-body stack gap-14">
-        {loading ? (
-          <Spinner />
-        ) : !report?.configured ? (
-          <div className="alert warn small">
-            Add <code>DEVLOPER_REPORT_GEMENI</code> as a repository secret and re-run the deploy to turn this on.
-          </div>
-        ) : (
-          <>
-            <div className="row gap-12 wrap-row">
-              {report?.doc_id && (
-                <a href={`https://docs.google.com/document/d/${report.doc_id}/edit`} target="_blank" rel="noreferrer" className="small">
-                  Open the report doc ↗
-                </a>
-              )}
-              {report?.sheet1_id && (
-                <a href={`https://docs.google.com/spreadsheets/d/${report.sheet1_id}/edit`} target="_blank" rel="noreferrer" className="small">
-                  Open sheet 1 ↗
-                </a>
-              )}
-              {report?.sheet2_id && (
-                <a href={`https://docs.google.com/spreadsheets/d/${report.sheet2_id}/edit`} target="_blank" rel="noreferrer" className="small">
-                  Open sheet 2 ↗
-                </a>
-              )}
-            </div>
-
-            {report?.error && <div className="alert warn small">{report.error}</div>}
-            {report?.status ? (
-              <div className={`alert ${alertClass} small`} style={{ whiteSpace: 'pre-wrap' }}>
-                {report.summary}
-                <div className="tiny dim" style={{ marginTop: 8 }}>
-                  {report.checked_at ? `Written ${relativeTime(report.checked_at)}` : ''}
-                </div>
-              </div>
-            ) : (
-              <Empty icon="📋" title="No report yet" hint="Runs automatically every Monday — or press Run now above for a real test right now." />
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function Analytics() {
-  const { admin } = useAuth();
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -868,8 +753,6 @@ export function Analytics() {
 
       <div className="stack gap-20" style={{ marginBottom: 20 }}>
         <HealthCheckPanel />
-        {/* Owner-only — see DevReportPanel's own comment for why staff must never see this. */}
-        {admin?.role === 'owner' && <DevReportPanel />}
       </div>
 
       {!status?.connected ? (
