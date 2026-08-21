@@ -9,11 +9,21 @@
  * product stock/pricing beyond what's public — this is a public,
  * unauthenticated endpoint, so it is grounded only in information that is
  * already public on the site.
+ *
+ * Fast path: the handful of questions almost every visitor actually asks —
+ * delivery charge, payment methods, order tracking, return/warranty policy,
+ * contact info — are answered directly from this same real data, with no
+ * Gemini call at all. That is the entire latency difference: a D1 read
+ * instead of a network round trip to an LLM. Anything that doesn't match
+ * one of those still goes to Gemini exactly as before — a genuinely unusual
+ * question taking longer is fine; a common one taking several seconds
+ * wasn't.
  */
 
 import type { Env } from '../types';
 import { geminiGenerate, geminiConfigured, type GeminiTurn, type GeminiResult } from './gemini';
 import { getPublicSettings } from './catalog';
+import type { StoreSettings } from './pricing';
 
 const RULES = `
 You are the customer support chat assistant embedded on the Arif Gadgets website — a Bangladeshi wholesale/retail gadget shop (phones, audio, wearables, power/charging, computing accessories). You talk directly to shoppers and site visitors, not staff.
@@ -34,33 +44,112 @@ interface PageRow {
   body: string;
 }
 
-async function storeContext(env: Env): Promise<string> {
+interface StoreContext {
+  settings: StoreSettings & Record<string, string>;
+  categories: string[];
+  pages: PageRow[];
+}
+
+async function gatherContext(env: Env): Promise<StoreContext> {
   const settings = await getPublicSettings(env);
   const [categories, pages] = await Promise.all([
     env.DB.prepare('SELECT name FROM categories ORDER BY sort_order ASC').all<{ name: string }>(),
     env.DB.prepare("SELECT title, summary, body FROM pages WHERE published = 1 AND section <> 'hidden' ORDER BY sort_order ASC").all<PageRow>(),
   ]);
+  return {
+    settings,
+    categories: (categories.results ?? []).map((c) => c.name),
+    pages: pages.results ?? [],
+  };
+}
 
-  const taka = (poisha: number) => Math.round(poisha / 100).toLocaleString('en-US');
+const taka = (poisha: number) => Math.round(poisha / 100).toLocaleString('en-US');
 
+function contextText(ctx: StoreContext): string {
+  const s = ctx.settings;
   const lines = [
-    `Store: ${settings.store_name || 'Arif Gadgets'}${settings.store_tagline ? ` — ${settings.store_tagline}` : ''}`,
-    settings.store_address ? `Address: ${settings.store_address}` : '',
-    `Support phone: ${settings.support_phone || 'not published'}${settings.support_phone_2 ? `, ${settings.support_phone_2}` : ''}`,
-    settings.support_whatsapp_url ? `WhatsApp: ${settings.support_whatsapp_url}` : '',
-    settings.support_email ? `Support email: ${settings.support_email}` : '',
-    `Delivery charge: ৳${taka(settings.shipping_dhaka)} inside Dhaka, ৳${taka(settings.shipping_outside)} outside Dhaka` +
-      (settings.free_shipping_over > 0 ? `, free above ৳${taka(settings.free_shipping_over)}` : '') +
+    `Store: ${s.store_name || 'Arif Gadgets'}${s.store_tagline ? ` — ${s.store_tagline}` : ''}`,
+    s.store_address ? `Address: ${s.store_address}` : '',
+    `Support phone: ${s.support_phone || 'not published'}${s.support_phone_2 ? `, ${s.support_phone_2}` : ''}`,
+    s.support_whatsapp_url ? `WhatsApp: ${s.support_whatsapp_url}` : '',
+    s.support_email ? `Support email: ${s.support_email}` : '',
+    `Delivery charge: ৳${taka(s.shipping_dhaka)} inside Dhaka, ৳${taka(s.shipping_outside)} outside Dhaka` +
+      (s.free_shipping_over > 0 ? `, free above ৳${taka(s.free_shipping_over)}` : '') +
       '.',
     'Payment methods: Cash on delivery, bKash, Nagad, Rocket, bank transfer.',
-    `Categories carried: ${(categories.results ?? []).map((c) => c.name).join(', ') || 'a range of gadgets'}.`,
+    `Categories carried: ${ctx.categories.join(', ') || 'a range of gadgets'}.`,
   ].filter(Boolean);
 
-  const policyText = (pages.results ?? [])
+  const policyText = ctx.pages
     .map((p) => `### ${p.title}\n${[p.summary, (p.body ?? '').slice(0, 700)].filter(Boolean).join('\n')}`)
     .join('\n\n');
 
   return `${lines.join('\n')}\n\nPOLICY PAGES (published on the site):\n${policyText || '(none published yet)'}`;
+}
+
+/** The nearest matching policy page's own words, trimmed — never a canned line pretending to be the real policy. */
+function pageAnswer(ctx: StoreContext, titleKeywords: string[]): string | null {
+  const page = ctx.pages.find((p) => titleKeywords.some((k) => p.title.toLowerCase().includes(k)));
+  if (!page) return null;
+  const text = [page.summary, (page.body ?? '').slice(0, 400)].filter(Boolean).join(' — ');
+  return text || null;
+}
+
+interface FastRule {
+  test: RegExp;
+  answer: (ctx: StoreContext) => string;
+}
+
+/**
+ * Keyword patterns for the questions that make up the bulk of real support
+ * chat traffic. Each answer is built from `ctx` (live settings/pages) at
+ * call time, never a hardcoded string — the fast path is faster because it
+ * skips Gemini, not because it skips being accurate.
+ */
+const FAST_RULES: FastRule[] = [
+  {
+    test: /ডেলিভারি\s*(চার্জ|খরচ|ফি)|shipping\s*(cost|charge|fee)|delivery\s*(charge|fee|cost)|কুরিয়ার\s*চার্জ|কত\s*টাকা.{0,10}ডেলিভারি/i,
+    answer: (ctx) => {
+      const s = ctx.settings;
+      let text = `ডেলিভারি চার্জ — ঢাকার ভেতরে ৳${taka(s.shipping_dhaka)}, ঢাকার বাইরে ৳${taka(s.shipping_outside)}`;
+      if (s.free_shipping_over > 0) text += `। ৳${taka(s.free_shipping_over)}+ অর্ডারে ডেলিভারি ফ্রি`;
+      return `${text}।`;
+    },
+  },
+  {
+    test: /পেমেন্ট|কিভাবে.{0,6}(পে|টাকা\s*দিব)|payment\s*method|how.{0,10}pay|bkash|নগদ|nagad|rocket|cash\s*on\s*delivery|\bcod\b/i,
+    answer: () => 'পেমেন্ট করতে পারবেন Cash on Delivery, bKash, Nagad, Rocket অথবা ব্যাংক ট্রান্সফারের মাধ্যমে — যেটা আপনার জন্য সহজ, সেটাই বেছে নিন।',
+  },
+  {
+    test: /অর্ডার\s*(ট্র্যাক|কই|কোথায়)|track.{0,4}(my\s*)?order|where.{0,6}my\s*order/i,
+    answer: () => '"Track your order" পেজে গিয়ে অর্ডার নম্বর আর যেই ফোন নম্বর দিয়ে অর্ডার করেছিলেন সেটা দিন — সাথে সাথে বর্তমান স্ট্যাটাস দেখতে পাবেন।',
+  },
+  {
+    test: /রিটার্ন|return\s*policy|ফেরত\s*(দেওয়া|করা|নেয়)/i,
+    answer: (ctx) => pageAnswer(ctx, ['return']) ?? 'নির্দিষ্ট শর্তে রিটার্ন নেওয়া হয় — বিস্তারিত জানতে সাপোর্টে (WhatsApp/ফোন) যোগাযোগ করুন।',
+  },
+  {
+    test: /ওয়ারেন্টি|warranty/i,
+    answer: (ctx) => pageAnswer(ctx, ['warranty']) ?? 'প্রোডাক্ট অনুযায়ী ওয়ারেন্টির মেয়াদ ভিন্ন — নির্দিষ্ট প্রোডাক্টের ওয়ারেন্টি জানতে সাপোর্টে যোগাযোগ করুন।',
+  },
+  {
+    test: /যোগাযোগ.{0,6}(নম্বর|করব)|contact\s*(number|info)|phone\s*number|হোয়াটসঅ্যাপ\s*নম্বর/i,
+    answer: (ctx) => {
+      const s = ctx.settings;
+      const parts: string[] = [];
+      if (s.support_phone) parts.push(`ফোন: ${s.support_phone}`);
+      if (s.support_whatsapp_url) parts.push(`WhatsApp: ${s.support_whatsapp_url}`);
+      if (s.support_email) parts.push(`ইমেইল: ${s.support_email}`);
+      return parts.length ? parts.join(' · ') : 'যোগাযোগের তথ্যের জন্য ওয়েবসাইটের ফুটার দেখুন।';
+    },
+  },
+];
+
+function fastAnswer(message: string, ctx: StoreContext): string | null {
+  for (const rule of FAST_RULES) {
+    if (rule.test.test(message)) return rule.answer(ctx);
+  }
+  return null;
 }
 
 export function supportAssistantConfigured(env: Env): boolean {
@@ -71,7 +160,14 @@ const MAX_HISTORY = 10;
 
 export async function supportAssistantReply(env: Env, history: GeminiTurn[]): Promise<GeminiResult<string>> {
   const trimmed = history.slice(-MAX_HISTORY);
-  const context = await storeContext(env);
-  const system = `${RULES}\n\nSTORE INFO:\n${context}`;
+  const ctx = await gatherContext(env);
+
+  const lastUser = [...trimmed].reverse().find((t) => t.role === 'user');
+  if (lastUser) {
+    const instant = fastAnswer(lastUser.text, ctx);
+    if (instant) return { ok: true, data: instant };
+  }
+
+  const system = `${RULES}\n\nSTORE INFO:\n${contextText(ctx)}`;
   return geminiGenerate(env, 'SUPPORT_GEMINI_API_KEY', system, trimmed, { temperature: 0.5, maxOutputTokens: 512 });
 }
