@@ -22,8 +22,10 @@ export type GeminiKeyName = 'ADMIN_GEMINI_API_KEY' | 'SUPPORT_GEMINI_API_KEY' | 
 export type GeminiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 // Flash: fast and inexpensive enough for a chat reply or a daily digest —
-// none of these three features need the heaviest reasoning tier.
-const MODEL = 'gemini-2.5-flash';
+// none of these features need the heaviest reasoning tier. gemini-2.5-flash
+// was retired for new callers (confirmed by Google's own live error message
+// on this exact endpoint); gemini-3.6-flash is its replacement.
+const MODEL = 'gemini-3.6-flash';
 
 export function geminiConfigured(env: Env, key: GeminiKeyName): boolean {
   return Boolean(env[key]?.trim());
