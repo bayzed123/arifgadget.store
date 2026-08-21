@@ -39,7 +39,6 @@ import { geminiConfigured } from '../lib/gemini';
 import { supportAssistantConfigured } from '../lib/supportAssistant';
 import { runHealthCheck } from '../lib/healthCheck';
 import { runDevReport } from '../lib/devReport';
-import { parseDocumentId } from '../lib/googleDocs';
 import { ORDER_STATUSES, STATUS_ALIASES, NEXT_STATUSES, label } from '../lib/checkpoints';
 import {
   applyCourierCheckpoint,
@@ -83,6 +82,18 @@ function requireOwner(c: { get: (k: 'admin') => AdminClaims }) {
   const role = c.get('admin').role;
   if (role !== 'owner' && role !== 'admin') {
     throw new HTTPException(403, { message: 'This action needs an admin or owner account' });
+  }
+}
+
+/**
+ * Stricter than requireOwner above on purpose: that one also admits the
+ * 'admin' tier, which is right for ordinary settings but wrong for the
+ * weekly developer report — it reads staff activity, so it must stay
+ * invisible to every role except the literal owner account.
+ */
+function requireTrueOwner(c: { get: (k: 'admin') => AdminClaims }) {
+  if (c.get('admin').role !== 'owner') {
+    throw new HTTPException(403, { message: 'Owner account required' });
   }
 }
 
@@ -1593,12 +1604,16 @@ admin.post('/assistant/chat', async (c) => {
  * "Run now" button rather than waiting for tomorrow's cron.
  */
 
+// Deliberately does not mention the weekly developer report — any admin or
+// staff account can call this, and that report's whole point is watching
+// staff activity, so its existence must never surface here. Its own
+// configured-state travels only through /dev-report/status, which is
+// owner-gated.
 admin.get('/gemini/status', async (c) => {
   return c.json({
     admin_assistant: geminiConfigured(c.env, 'ADMIN_GEMINI_API_KEY'),
     support_chat: supportAssistantConfigured(c.env),
     site_health_check: geminiConfigured(c.env, 'ALERT_GEMINI_API_KEY'),
-    dev_report: geminiConfigured(c.env, 'DEVLOPER_REPORT_GEMENI'),
   });
 });
 
@@ -1625,13 +1640,16 @@ admin.post('/health-check/run', async (c) => {
 
 /* ══════════════════════════ Weekly developer report (Gemini) ══════════════════════════
  *
- * See devReport.ts for what actually goes into it. This section is just:
- * where to write it (a Google Doc + up to two Google Sheets the owner
- * shares with the service account), the latest result, and a "Run now"
- * button rather than waiting for Monday.
+ * See devReport.ts for what actually goes into it. Owner-only, on purpose:
+ * the report includes real staff activity (from audit_log), so staff/admin
+ * roles must never be able to see that this exists, let alone read it —
+ * only the owner. There is deliberately no UI or route to change where it's
+ * written; the Doc/Sheet destinations are set once by a migration
+ * (0021_dev_report_destinations.sql) and are not exposed here at all.
  */
 
 admin.get('/dev-report/status', async (c) => {
+  requireTrueOwner(c);
   const [docId, sheet1Id, sheet2Id, status, summary, checkedAt, error] = await Promise.all([
     settingValue(c.env, 'dev_report_doc_id'),
     settingValue(c.env, 'dev_report_sheet1_id'),
@@ -1642,6 +1660,7 @@ admin.get('/dev-report/status', async (c) => {
     settingValue(c.env, 'dev_report_error'),
   ]);
   return c.json({
+    configured: geminiConfigured(c.env, 'DEVLOPER_REPORT_GEMENI'),
     doc_id: docId,
     sheet1_id: sheet1Id,
     sheet2_id: sheet2Id,
@@ -1652,40 +1671,9 @@ admin.get('/dev-report/status', async (c) => {
   });
 });
 
-/** Saves which Doc and Sheet(s) to write the weekly report into. Any of the three may be blank — that destination is just skipped. */
-admin.post('/dev-report/connect', async (c) => {
-  requireOwner(c);
-  const body = await readJson(c);
-  const docRaw = optionalString(body.doc_url, '', 300);
-  const sheet1Raw = optionalString(body.sheet1_url, '', 300);
-  const sheet2Raw = optionalString(body.sheet2_url, '', 300);
-
-  const docId = docRaw ? parseDocumentId(docRaw) : '';
-  if (docRaw && !docId) badRequest('That does not look like a Google Docs link or ID.');
-  const sheet1Id = sheet1Raw ? parseSpreadsheetId(sheet1Raw) : '';
-  if (sheet1Raw && !sheet1Id) badRequest('The first sheet does not look like a Google Sheets link or ID.');
-  const sheet2Id = sheet2Raw ? parseSpreadsheetId(sheet2Raw) : '';
-  if (sheet2Raw && !sheet2Id) badRequest('The second sheet does not look like a Google Sheets link or ID.');
-
-  await c.env.DB.batch(
-    [
-      ['dev_report_doc_id', docId ?? ''],
-      ['dev_report_sheet1_id', sheet1Id ?? ''],
-      ['dev_report_sheet2_id', sheet2Id ?? ''],
-    ].map(([key, value]) =>
-      c.env.DB.prepare(
-        `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%s','now'))
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-      ).bind(key, value),
-    ),
-  );
-
-  await audit(c.env, c.get('admin').username, 'dev_report.connect', 'settings', '', 'Updated weekly report destinations');
-  return c.json({ ok: true, doc_id: docId, sheet1_id: sheet1Id, sheet2_id: sheet2Id });
-});
-
 /** Runs the report immediately, rather than waiting for Monday. */
 admin.post('/dev-report/run', async (c) => {
+  requireTrueOwner(c);
   const result = await runDevReport(c.env);
   return c.json(result);
 });

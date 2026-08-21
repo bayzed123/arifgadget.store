@@ -6,8 +6,7 @@ import { useCart, useTheme, useWishlist } from '../lib/store';
 import type { Category, PageLink, StoreSettings } from '../lib/types';
 import { Logo } from './Logo';
 import { PaymentBadges } from './PaymentBadges';
-import { WhatsAppButton } from './WhatsAppButton';
-import { SupportChat } from './SupportChat';
+import { ChatLauncher } from './ChatLauncher';
 import { MenuDrawer } from './MenuDrawer';
 import { BottomNav } from './BottomNav';
 import { OfferPopup } from './OfferPopup';
@@ -419,8 +418,7 @@ export function Layout() {
       <OfferPopup />
       {/* Hover any picture to see it enlarged; click one to open it full screen. */}
       <ImageZoom />
-      <WhatsAppButton number={settings?.whatsapp_number} storeName={settings?.store_name} />
-      <SupportChat />
+      <ChatLauncher number={settings?.whatsapp_number} storeName={settings?.store_name} />
       <MenuDrawer open={menuOpen} categories={categories} onClose={() => setMenuOpen(false)} />
       <BottomNav onOpenCategories={() => setMenuOpen(true)} />
     </>
