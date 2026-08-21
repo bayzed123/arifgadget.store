@@ -119,3 +119,20 @@ for (const [name, consequence] of Object.entries(GEMINI_SECRETS)) {
     console.log(`${name} not provided — ${consequence}.`);
   }
 }
+
+/**
+ * Secret path segment for the weekly developer report's manual GitHub
+ * Actions trigger (see .github/workflows/dev-report-trigger.yml). Same
+ * "absent is fine" rule as everything else here: without it the trigger
+ * workflow's request 404s and the report simply keeps running on its
+ * Monday cron and the dashboard's Run now button instead.
+ */
+const devReportTriggerToken = process.env.DEV_REPORT_TRIGGER_TOKEN?.trim();
+if (devReportTriggerToken) {
+  await put('DEV_REPORT_TRIGGER_TOKEN', devReportTriggerToken);
+  console.log('DEV_REPORT_TRIGGER_TOKEN set from the repository secret.');
+} else if (names.has('DEV_REPORT_TRIGGER_TOKEN')) {
+  console.log('DEV_REPORT_TRIGGER_TOKEN already present on the Worker — left unchanged.');
+} else {
+  console.log('DEV_REPORT_TRIGGER_TOKEN not provided — the GitHub Actions manual trigger will not work yet.');
+}

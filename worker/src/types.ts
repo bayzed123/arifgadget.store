@@ -53,6 +53,15 @@ export interface Env {
    * feature from the key they actually added.
    */
   DEVLOPER_REPORT_GEMENI?: string;
+  /**
+   * Secret path segment that fires the weekly developer report on demand —
+   * the GitHub Actions "Run workflow" button, for when Monday's cron or the
+   * dashboard's Run now isn't convenient. Same shape as
+   * STEADFAST_WEBHOOK_TOKEN: absent means the route 404s outright rather
+   * than existing-but-locked, so nothing about it is visible from outside
+   * without already holding the real token.
+   */
+  DEV_REPORT_TRIGGER_TOKEN?: string;
 }
 
 export interface AdminClaims {
