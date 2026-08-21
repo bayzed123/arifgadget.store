@@ -77,6 +77,23 @@ app.route('/api/account', account);
 // because the caller is Steadfast rather than a person.
 app.route('/api/courier', courierHook);
 
+/**
+ * Fires the weekly developer report on demand — the GitHub Actions "Run
+ * workflow" button (see .github/workflows/dev-report-trigger.yml), for
+ * whenever Monday's cron or the dashboard's Run now isn't convenient.
+ * Authenticated by a secret path segment, same pattern as the Steadfast
+ * webhook right above: unconfigured, wrong token, and a right-shaped-but-
+ * wrong token all 404 identically, so nothing here confirms this route
+ * exists to anyone who doesn't already hold the real token.
+ */
+app.post('/api/dev-report/trigger/:token', async (c) => {
+  const expected = c.env.DEV_REPORT_TRIGGER_TOKEN?.trim();
+  if (!expected || c.req.param('token') !== expected) return c.notFound();
+
+  const result = await runDevReport(c.env);
+  return c.json(result);
+});
+
 // Nested (not mounted separately) so these inherit the admin auth guard.
 admin.route('/analytics', analytics);
 admin.route('/content', adminContent);

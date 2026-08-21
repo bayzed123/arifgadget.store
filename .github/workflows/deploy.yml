@@ -93,6 +93,10 @@ jobs:
           SUPPORT_GEMINI_API_KEY: ${{ secrets.SUPPORT_GEMINI_API_KEY }}
           ALERT_GEMINI_API_KEY: ${{ secrets.ALERT_GEMINI_API_KEY }}
           DEVLOPER_REPORT_GEMENI: ${{ secrets.DEVLOPER_REPORT_GEMENI }}
+          # Secret path segment for the weekly dev report's manual GitHub
+          # Actions trigger. Optional: unset just means that trigger button
+          # 404s and the report still runs on its Monday cron / Run now.
+          DEV_REPORT_TRIGGER_TOKEN: ${{ secrets.DEV_REPORT_TRIGGER_TOKEN }}
         run: node scripts/provision-secrets.mjs
 
       - name: Provision the dashboard owner

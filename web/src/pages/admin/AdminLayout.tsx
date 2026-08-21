@@ -24,6 +24,10 @@ const NAV = [
   { to: '/admin/settings', icon: '⚙️', label: 'Settings' },
 ];
 
+// Owner-only, so it's kept out of NAV above (built for everyone) and added
+// separately, gated on admin.role, right where it's rendered.
+const OWNER_NAV = { to: '/admin/staff', icon: '🧑‍💼', label: 'Staff accounts' };
+
 export function AdminLayout() {
   // robots.txt already disallows the whole /admin path — this is the
   // belt-and-suspenders layer, so a page never becomes indexable just
@@ -50,6 +54,13 @@ export function AdminLayout() {
             {item.label}
           </NavLink>
         ))}
+
+        {admin?.role === 'owner' && (
+          <NavLink to={OWNER_NAV.to} className={({ isActive }) => (isActive ? 'active' : '')}>
+            <span aria-hidden="true">{OWNER_NAV.icon}</span>
+            {OWNER_NAV.label}
+          </NavLink>
+        )}
 
         {/* Bangla walkthrough of every screen — deliberately loud, the owner
             should never have to hunt for the manual. */}

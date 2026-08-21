@@ -1,0 +1,63 @@
+name: Run the weekly developer report
+
+# A manual "Run workflow" button for the weekly developer report — the same
+# report that already runs every Monday on its own and from the admin
+# dashboard's Run now button, for whenever neither of those is convenient.
+#
+# Talks straight to the Worker over its own secret-path-segment token
+# (DEV_REPORT_TRIGGER_TOKEN), the same fail-closed pattern the Steadfast
+# courier webhook uses: unconfigured, wrong, or missing all 404 identically,
+# so nothing about this route is visible to anyone without the real token.
+# No Cloudflare credentials are needed here — a live deploy already proves
+# whichever API address is configured works.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    name: Fire the report
+    runs-on: ubuntu-latest
+    env:
+      API_DOMAIN: ${{ vars.API_DOMAIN }}
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+      WORKERS_SUBDOMAIN: ${{ vars.WORKERS_SUBDOMAIN }}
+      DEV_REPORT_TRIGGER_TOKEN: ${{ secrets.DEV_REPORT_TRIGGER_TOKEN }}
+    steps:
+      - name: Call the Worker
+        run: |
+          if [ -z "$DEV_REPORT_TRIGGER_TOKEN" ]; then
+            echo "::error::DEV_REPORT_TRIGGER_TOKEN is not set as a repository secret yet — there is nothing to call. Add it under Settings → Secrets and variables → Actions, then re-run."
+            exit 1
+          fi
+
+          # Same precedence as the deploy's own API URL resolution
+          # (scripts/bootstrap-cf.mjs), minus the Cloudflare zone check —
+          # unnecessary here since a working deploy already proves it.
+          API_URL="$API_BASE_URL"
+          if [ -z "$API_URL" ] && [ -n "$API_DOMAIN" ]; then
+            API_URL="https://$API_DOMAIN"
+          fi
+          if [ -z "$API_URL" ] && [ -n "$WORKERS_SUBDOMAIN" ]; then
+            API_URL="https://arif-gadgets-api.$WORKERS_SUBDOMAIN.workers.dev"
+          fi
+          if [ -z "$API_URL" ]; then
+            echo "::error::No API address resolved. Set API_DOMAIN, API_BASE_URL, or WORKERS_SUBDOMAIN as a repository variable — whichever the deploy workflow already uses."
+            exit 1
+          fi
+
+          echo "Calling $API_URL/api/dev-report/trigger/…"
+          STATUS=$(curl -sS -o /tmp/response.json -w '%{http_code}' -X POST \
+            "$API_URL/api/dev-report/trigger/$DEV_REPORT_TRIGGER_TOKEN")
+
+          echo "HTTP $STATUS"
+          cat /tmp/response.json; echo
+
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::The Worker rejected the request (HTTP $STATUS). A 404 usually means DEV_REPORT_TRIGGER_TOKEN here doesn't match the one on the Worker — re-run the deploy after setting the repository secret, or check the token was copied correctly."
+            exit 1
+          fi
+
+          echo "Weekly developer report triggered successfully."

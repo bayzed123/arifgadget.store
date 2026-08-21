@@ -39,6 +39,13 @@ export interface GeminiTurn {
 interface GeminiOptions {
   temperature?: number;
   maxOutputTokens?: number;
+  /**
+   * Set to 'application/json' to have Gemini return strict JSON instead of
+   * freeform text — used by the weekly developer report so its sections can
+   * be written into the Doc/Sheet with real formatting, rather than parsing
+   * markdown out of a chat-style reply.
+   */
+  responseMimeType?: string;
 }
 
 interface GeminiApiResponse {
@@ -100,6 +107,7 @@ async function callGemini(
     generationConfig: {
       temperature: opts.temperature ?? 0.4,
       maxOutputTokens: opts.maxOutputTokens ?? 1024,
+      ...(opts.responseMimeType ? { responseMimeType: opts.responseMimeType } : {}),
     },
   };
 

@@ -38,7 +38,6 @@ import type { GeminiTurn } from '../lib/gemini';
 import { geminiConfigured } from '../lib/gemini';
 import { supportAssistantConfigured } from '../lib/supportAssistant';
 import { runHealthCheck } from '../lib/healthCheck';
-import { runDevReport } from '../lib/devReport';
 import { ORDER_STATUSES, STATUS_ALIASES, NEXT_STATUSES, label } from '../lib/checkpoints';
 import {
   applyCourierCheckpoint,
@@ -60,10 +59,17 @@ function secret(env: Env): string {
   return env.JWT_SECRET;
 }
 
-/** Guards every route below except /setup and /login. */
+/** Guards every route below except /setup, /login, and the forgot-password pair — none of those have a session token to check yet. */
 admin.use('*', async (c, next) => {
   const path = c.req.path;
-  if (path.endsWith('/admin/login') || path.endsWith('/admin/setup')) return next();
+  if (
+    path.endsWith('/admin/login') ||
+    path.endsWith('/admin/setup') ||
+    path.endsWith('/admin/forgot-password/start') ||
+    path.endsWith('/admin/forgot-password/verify')
+  ) {
+    return next();
+  }
 
   const header = c.req.header('Authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
@@ -87,14 +93,19 @@ function requireOwner(c: { get: (k: 'admin') => AdminClaims }) {
 
 /**
  * Stricter than requireOwner above on purpose: that one also admits the
- * 'admin' tier, which is right for ordinary settings but wrong for the
- * weekly developer report — it reads staff activity, so it must stay
- * invisible to every role except the literal owner account.
+ * 'admin' tier, which is right for ordinary settings but wrong for managing
+ * staff accounts themselves — creating, deactivating, or changing another
+ * account's role is owner-only.
  */
 function requireTrueOwner(c: { get: (k: 'admin') => AdminClaims }) {
   if (c.get('admin').role !== 'owner') {
     throw new HTTPException(403, { message: 'Owner account required' });
   }
+}
+
+/** Security answers are matched case- and whitespace-insensitively — "Dhaka" and "dhaka " must both work. */
+function normalizeAnswer(answer: string): string {
+  return answer.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 // ---------------------------------------------------------------- auth
@@ -132,7 +143,7 @@ admin.post('/login', async (c) => {
   const password = requireString(body.password, 'password', 200);
 
   const row = await c.env.DB.prepare(
-    `SELECT id, email, username, name, role, password_hash, salt
+    `SELECT id, email, username, name, role, password_hash, salt, active
        FROM admins
       WHERE lower(email) = ?1 OR lower(username) = ?1`,
   )
@@ -145,6 +156,7 @@ admin.post('/login', async (c) => {
       role: AdminClaims['role'];
       password_hash: string;
       salt: string;
+      active: number;
     }>();
 
   // Hash even when the account is missing so timing doesn't reveal valid emails.
@@ -153,6 +165,7 @@ admin.post('/login', async (c) => {
     : (await hashPassword(password, randomSalt()), false);
 
   if (!row || !ok) unauthorized('Wrong username or password');
+  if (row.active === 0) unauthorized('This account has been deactivated. Contact the shop owner.');
 
   const claims: AdminClaims = {
     kind: 'admin',
@@ -175,7 +188,182 @@ admin.post('/login', async (c) => {
   });
 });
 
+/*
+ * Self-service password reset for staff — deliberately does NOT work for
+ * the owner account. The owner's password is controlled only through the
+ * ADMIN_PASSWORD repository secret (see create-admin.mjs); routing it
+ * through a security-question flow here would make it resettable by anyone
+ * who guessed the answer, which is a strictly worse guarantee than "only
+ * whoever holds the GitHub secret can change it".
+ *
+ * Both routes give the exact same generic response whether the username
+ * doesn't exist, belongs to the owner, or was created before this feature
+ * existed and never got a security question — so this can't be used to
+ * probe which usernames are real, and can never quietly confirm the owner's
+ * own username either.
+ */
+const RESET_NOT_AVAILABLE = "Password reset isn't available for this account. Contact the shop owner.";
+
+admin.post('/forgot-password/start', async (c) => {
+  const body = await readJson(c);
+  const username = requireString(body.username, 'username', 60).toLowerCase();
+
+  const row = await c.env.DB.prepare(
+    `SELECT role, security_question FROM admins WHERE lower(username) = ? OR lower(email) = ?`,
+  )
+    .bind(username, username)
+    .first<{ role: AdminClaims['role']; security_question: string | null }>();
+
+  if (!row || row.role === 'owner' || !row.security_question) unauthorized(RESET_NOT_AVAILABLE);
+
+  return c.json({ question: row.security_question });
+});
+
+admin.post('/forgot-password/verify', async (c) => {
+  const body = await readJson(c);
+  const username = requireString(body.username, 'username', 60).toLowerCase();
+  const answer = requireString(body.answer, 'answer', 200);
+  const newPassword = requireString(body.new_password, 'new_password', 200);
+  if (newPassword.length < 10) badRequest('Password must be at least 10 characters');
+
+  const row = await c.env.DB.prepare(
+    `SELECT id, role, security_answer_hash, security_answer_salt FROM admins WHERE lower(username) = ? OR lower(email) = ?`,
+  )
+    .bind(username, username)
+    .first<{ id: number; role: AdminClaims['role']; security_answer_hash: string | null; security_answer_salt: string | null }>();
+
+  const eligible = row && row.role !== 'owner' && row.security_answer_hash && row.security_answer_salt;
+  // Hash even when ineligible, so a nonexistent/owner/unset-question account
+  // can't be timed apart from a real wrong-answer attempt.
+  const ok = eligible
+    ? await verifyPassword(normalizeAnswer(answer), row!.security_answer_salt!, row!.security_answer_hash!)
+    : (await hashPassword(normalizeAnswer(answer), randomSalt()), false);
+
+  if (!eligible || !ok) unauthorized(RESET_NOT_AVAILABLE);
+
+  const salt = randomSalt();
+  const hash = await hashPassword(newPassword, salt);
+  await c.env.DB.prepare('UPDATE admins SET password_hash = ?, salt = ? WHERE id = ?').bind(hash, salt, row!.id).run();
+
+  await audit(c.env, username, 'staff.password_reset', 'admin', username, 'Self-service reset via security question');
+  return c.json({ ok: true });
+});
+
 admin.get('/me', (c) => c.json({ admin: c.get('admin') }));
+
+/*
+ * Staff accounts — owner-only. Creates the login the owner hands a new
+ * staff member, sets the security question/answer that account's own
+ * forgot-password flow (see the forgot-password routes further down) will
+ * use, and lets the owner deactivate an account without deleting it, so
+ * audit_log keeps pointing at a real name rather than an orphaned one.
+ * The owner's own row is never reachable through these routes.
+ */
+
+admin.get('/staff', async (c) => {
+  requireTrueOwner(c);
+  const { results } = await c.env.DB.prepare(
+    `SELECT id, username, name, email, role, active, created_at, last_login_at,
+            (security_question IS NOT NULL) AS has_security_question
+       FROM admins
+      WHERE role != 'owner'
+      ORDER BY created_at DESC`,
+  ).all<{
+    id: number;
+    username: string | null;
+    name: string;
+    email: string;
+    role: AdminClaims['role'];
+    active: number;
+    created_at: number;
+    last_login_at: number | null;
+    has_security_question: number;
+  }>();
+
+  return c.json({
+    staff: (results ?? []).map((r) => ({ ...r, active: r.active === 1, has_security_question: r.has_security_question === 1 })),
+  });
+});
+
+admin.post('/staff', async (c) => {
+  requireTrueOwner(c);
+  const body = await readJson(c);
+  const username = requireString(body.username, 'username', 60).toLowerCase();
+  const name = requireString(body.name, 'name', 120);
+  const password = requireString(body.password, 'password', 200);
+  const securityQuestion = requireString(body.security_question, 'security_question', 200);
+  const securityAnswer = requireString(body.security_answer, 'security_answer', 200);
+  // Only 'staff' and 'admin' can be created here — 'owner' is not a role
+  // this route can ever assign, so an unrecognised value quietly falls
+  // back to the least-privileged tier rather than erroring in a way that
+  // might be read as "try again with something more powerful".
+  const role: AdminClaims['role'] = body.role === 'admin' ? 'admin' : 'staff';
+  if (password.length < 10) badRequest('Password must be at least 10 characters');
+
+  const email = optionalString(body.email, '', 160).toLowerCase() || `${username}@local`;
+
+  const existing = await c.env.DB.prepare('SELECT id FROM admins WHERE lower(username) = ?').bind(username).first();
+  if (existing) conflict('That username is already taken.');
+
+  const salt = randomSalt();
+  const passwordHash = await hashPassword(password, salt);
+  const answerSalt = randomSalt();
+  const answerHash = await hashPassword(normalizeAnswer(securityAnswer), answerSalt);
+
+  const inserted = await c.env.DB.prepare(
+    `INSERT INTO admins (email, username, name, password_hash, salt, role, security_question, security_answer_hash, security_answer_salt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(email, username, name, passwordHash, salt, role, securityQuestion, answerHash, answerSalt)
+    .run();
+
+  await audit(c.env, c.get('admin').username, 'staff.create', 'admin', username, `role=${role}`);
+  return c.json({ ok: true, id: inserted.meta.last_row_id, username, role }, 201);
+});
+
+admin.patch('/staff/:id', async (c) => {
+  requireTrueOwner(c);
+  const id = requireInt(c.req.param('id'), 'id');
+
+  const target = await c.env.DB.prepare('SELECT role, username FROM admins WHERE id = ?')
+    .bind(id)
+    .first<{ role: AdminClaims['role']; username: string | null }>();
+  if (!target) notFound('Staff account not found');
+  if (target.role === 'owner') badRequest('The owner account is not managed here.');
+
+  const body = await readJson(c);
+  const sets: string[] = [];
+  const values: unknown[] = [];
+
+  if (body.name !== undefined) {
+    sets.push('name = ?');
+    values.push(requireString(body.name, 'name', 120));
+  }
+  if (body.role !== undefined) {
+    sets.push('role = ?');
+    values.push(body.role === 'admin' ? 'admin' : 'staff');
+  }
+  if (body.active !== undefined) {
+    sets.push('active = ?');
+    values.push(body.active ? 1 : 0);
+  }
+  if (!sets.length) badRequest('Nothing to update');
+
+  values.push(id);
+  await c.env.DB.prepare(`UPDATE admins SET ${sets.join(', ')} WHERE id = ?`)
+    .bind(...values)
+    .run();
+
+  await audit(
+    c.env,
+    c.get('admin').username,
+    body.active !== undefined ? (body.active ? 'staff.activate' : 'staff.deactivate') : 'staff.update',
+    'admin',
+    target.username ?? String(id),
+    '',
+  );
+  return c.json({ ok: true });
+});
 
 // ---------------------------------------------------------------- products
 
@@ -1604,11 +1792,10 @@ admin.post('/assistant/chat', async (c) => {
  * "Run now" button rather than waiting for tomorrow's cron.
  */
 
-// Deliberately does not mention the weekly developer report — any admin or
-// staff account can call this, and that report's whole point is watching
-// staff activity, so its existence must never surface here. Its own
-// configured-state travels only through /dev-report/status, which is
-// owner-gated.
+// Deliberately does not mention the weekly developer report at all — that
+// report is not exposed through the admin dashboard in any form (see
+// devReport.ts and dev-report-trigger.yml); its existence must never
+// surface to a staff or admin account here.
 admin.get('/gemini/status', async (c) => {
   return c.json({
     admin_assistant: geminiConfigured(c.env, 'ADMIN_GEMINI_API_KEY'),
@@ -1638,42 +1825,12 @@ admin.post('/health-check/run', async (c) => {
   return c.json(result);
 });
 
-/* ══════════════════════════ Weekly developer report (Gemini) ══════════════════════════
- *
- * See devReport.ts for what actually goes into it. Owner-only, on purpose:
- * the report includes real staff activity (from audit_log), so staff/admin
- * roles must never be able to see that this exists, let alone read it —
- * only the owner. There is deliberately no UI or route to change where it's
- * written; the Doc/Sheet destinations are set once by a migration
- * (0021_dev_report_destinations.sql) and are not exposed here at all.
+/*
+ * The weekly developer report has no admin-dashboard presence at all —
+ * intentionally. See devReport.ts for what it gathers and writes, and
+ * .github/workflows/dev-report-trigger.yml + the /api/dev-report/trigger/
+ * route in index.ts for the only way to fire it on demand: a secret-token
+ * GitHub Actions button only the account owner (who holds the GitHub repo
+ * secret) can use. No admin route, no staff/owner-role check, no UI panel
+ * — nothing here for any dashboard account, owner included, to find.
  */
-
-admin.get('/dev-report/status', async (c) => {
-  requireTrueOwner(c);
-  const [docId, sheet1Id, sheet2Id, status, summary, checkedAt, error] = await Promise.all([
-    settingValue(c.env, 'dev_report_doc_id'),
-    settingValue(c.env, 'dev_report_sheet1_id'),
-    settingValue(c.env, 'dev_report_sheet2_id'),
-    settingValue(c.env, 'dev_report_status'),
-    settingValue(c.env, 'dev_report_summary'),
-    settingValue(c.env, 'dev_report_checked_at'),
-    settingValue(c.env, 'dev_report_error'),
-  ]);
-  return c.json({
-    configured: geminiConfigured(c.env, 'DEVLOPER_REPORT_GEMENI'),
-    doc_id: docId,
-    sheet1_id: sheet1Id,
-    sheet2_id: sheet2Id,
-    status: status || null,
-    summary,
-    checked_at: checkedAt ? Number(checkedAt) : null,
-    error,
-  });
-});
-
-/** Runs the report immediately, rather than waiting for Monday. */
-admin.post('/dev-report/run', async (c) => {
-  requireTrueOwner(c);
-  const result = await runDevReport(c.env);
-  return c.json(result);
-});
