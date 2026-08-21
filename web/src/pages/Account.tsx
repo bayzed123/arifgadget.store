@@ -7,6 +7,7 @@ import { trackLogin, trackSignUp } from '../lib/analytics';
 import type { PressItem, Product } from '../lib/types';
 import { Empty, Spinner } from '../components/ui';
 import { ProductCard } from '../components/ProductCard';
+import { useSeo } from '../lib/seo';
 
 interface MyOrder {
   order_no: string;
@@ -414,6 +415,7 @@ function Dashboard() {
 }
 
 export function Account() {
+  useSeo({ title: 'Your Account', noindex: true });
   const { customer, ready } = useCustomer();
   if (!ready) return <Spinner />;
   return customer ? <Dashboard /> : <AuthPanel />;

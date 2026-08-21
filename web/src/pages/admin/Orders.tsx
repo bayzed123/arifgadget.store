@@ -340,6 +340,17 @@ export function Orders() {
                         </td>
                         <td>
                           <div className="row gap-4 wrap-row">
+                            {order.customer_phone && (
+                              <a
+                                className="btn ghost sm"
+                                href={`/invoice/${encodeURIComponent(order.order_no)}?phone=${encodeURIComponent(order.customer_phone)}&print=1`}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Open the printable invoice — the print dialog is one click from there"
+                              >
+                                🖨️ Invoice
+                              </a>
+                            )}
                             {courier?.connected && !order.consignment_id && !CLOSED.includes(order.status) && (
                               <button
                                 className="btn ghost sm"
@@ -519,9 +530,21 @@ function DeliveryCard({ order }: { order: AdminOrder | OrderDetail }) {
     <div className="delivery-card">
       <div className="between" style={{ marginBottom: 10 }}>
         <span className="eyebrow">Deliver to</span>
-        <button type="button" className="btn ghost sm" onClick={copy}>
-          Copy
-        </button>
+        <div className="row gap-4">
+          <button type="button" className="btn ghost sm" onClick={copy}>
+            Copy
+          </button>
+          {phone && (
+            <a
+              className="btn ghost sm"
+              href={`/invoice/${encodeURIComponent(order.order_no)}?phone=${encodeURIComponent(phone)}&print=1`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              🖨️ Print invoice
+            </a>
+          )}
+        </div>
       </div>
 
       <p className="delivery-name">{order.customer_name}</p>

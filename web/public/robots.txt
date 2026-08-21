@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+
+# The Sitemap: line is appended below at deploy time (scripts/generate-sitemap.mjs),
+# once the real domain for this deploy is known.

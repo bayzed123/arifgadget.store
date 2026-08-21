@@ -33,6 +33,26 @@ export interface Env {
    * Optional: without it the panel reports itself as not connected.
    */
   GOOGLE_SERVICE_ACCOUNT_JSON?: string;
+  /**
+   * Three separate Gemini API keys, one per feature, kept apart on purpose:
+   * a public, unauthenticated chat (support) can burn through its own quota
+   * without ever touching the key the owner's private admin assistant runs
+   * on, and the daily health check runs on a third again — one feature
+   * misbehaving never disables another. Each is optional; without it that
+   * one feature reports itself as not configured.
+   */
+  ADMIN_GEMINI_API_KEY?: string;
+  SUPPORT_GEMINI_API_KEY?: string;
+  ALERT_GEMINI_API_KEY?: string;
+  /**
+   * A fourth Gemini key, kept separate from the three above for the same
+   * reason: this one writes the weekly developer/ops report and must never
+   * be starved by, or itself starve, an admin's live chat. The spelling is
+   * intentionally exactly as the owner named the repository secret when
+   * they created it — renaming it here would silently disconnect this
+   * feature from the key they actually added.
+   */
+  DEVLOPER_REPORT_GEMENI?: string;
 }
 
 export interface AdminClaims {

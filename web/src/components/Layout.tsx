@@ -7,12 +7,14 @@ import type { Category, PageLink, StoreSettings } from '../lib/types';
 import { Logo } from './Logo';
 import { PaymentBadges } from './PaymentBadges';
 import { WhatsAppButton } from './WhatsAppButton';
+import { SupportChat } from './SupportChat';
 import { MenuDrawer } from './MenuDrawer';
 import { BottomNav } from './BottomNav';
 import { OfferPopup } from './OfferPopup';
 import { ImageZoom } from './ImageZoom';
 import { trackPageView, trackSearch } from '../lib/analytics';
 import { announceRoute, isPreviewMessage } from '../lib/previewBridge';
+import { useJsonLd } from '../lib/seo';
 
 export function Layout() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -91,6 +93,41 @@ export function Layout() {
   }
 
   const nextTheme = theme === 'dark' ? 'light' : 'dark';
+
+  // Sitewide structured data — Organization (so a knowledge-panel-style
+  // result has somewhere to pull from) and WebSite with a SearchAction
+  // (the documented way to earn the sitelinks search box, and genuinely
+  // true here: /catalog?q= is the real search this site runs on).
+  useJsonLd(
+    'sitewide',
+    settings
+      ? {
+          '@context': 'https://schema.org',
+          '@graph': [
+            {
+              '@type': 'Organization',
+              name: settings.store_name || 'Arif Gadgets',
+              url: window.location.origin,
+              logo: `${window.location.origin}${import.meta.env.BASE_URL}brand/logo-mark.svg`,
+              ...(settings.support_phone
+                ? { contactPoint: { '@type': 'ContactPoint', telephone: settings.support_phone, contactType: 'customer service' } }
+                : {}),
+              ...(settings.facebook_url ? { sameAs: [settings.facebook_url] } : {}),
+            },
+            {
+              '@type': 'WebSite',
+              name: settings.store_name || 'Arif Gadgets',
+              url: window.location.origin,
+              potentialAction: {
+                '@type': 'SearchAction',
+                target: `${window.location.origin}/catalog?q={search_term_string}`,
+                'query-input': 'required name=search_term_string',
+              },
+            },
+          ],
+        }
+      : null,
+  );
 
   return (
     <>
@@ -383,6 +420,7 @@ export function Layout() {
       {/* Hover any picture to see it enlarged; click one to open it full screen. */}
       <ImageZoom />
       <WhatsAppButton number={settings?.whatsapp_number} storeName={settings?.store_name} />
+      <SupportChat />
       <MenuDrawer open={menuOpen} categories={categories} onClose={() => setMenuOpen(false)} />
       <BottomNav onOpenCategories={() => setMenuOpen(true)} />
     </>

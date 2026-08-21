@@ -609,6 +609,326 @@ function SheetsPanel() {
   );
 }
 
+/* ─────────────────────────── AI assistants & health check ─────────────────────────── */
+
+interface GeminiStatus {
+  admin_assistant: boolean;
+  support_chat: boolean;
+  site_health_check: boolean;
+  dev_report: boolean;
+}
+
+interface HealthStatus {
+  status: 'ok' | 'warning' | 'error' | null;
+  summary: string;
+  checked_at: number | null;
+  error: string;
+}
+
+/**
+ * Three independent Gemini-powered features (see gemini.ts on the Worker for
+ * why the keys are kept separate): the admin assistant floating on every
+ * dashboard screen, the storefront's support chat, and this — a health check
+ * that runs once a day on its own and only needs checking in on here.
+ */
+function HealthCheckPanel() {
+  const toast = useToast();
+  const [gemini, setGemini] = useState<GeminiStatus | null>(null);
+  const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+
+  function load() {
+    setLoading(true);
+    Promise.all([
+      api<GeminiStatus>('/api/admin/gemini/status', { auth: true }),
+      api<HealthStatus>('/api/admin/health-check/status', { auth: true }),
+    ])
+      .then(([g, h]) => {
+        setGemini(g);
+        setHealth(h);
+      })
+      .catch(() => undefined)
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function runNow() {
+    setRunning(true);
+    try {
+      const res = await api<{ ok: boolean; error: string }>('/api/admin/health-check/run', { method: 'POST', auth: true });
+      if (res.ok) toast('Health check complete', 'success');
+      else toast(res.error, 'error');
+      load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not run the check', 'error');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const alertClass = health?.status === 'ok' ? 'success' : health?.status === 'error' ? 'error' : 'warn';
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>AI assistants &amp; daily health check</h3>
+          <p className="tiny dim">Powered by Gemini — three separate API keys, one per feature.</p>
+        </div>
+        {gemini?.site_health_check && (
+          <button className="btn ghost sm" disabled={running} onClick={runNow}>
+            {running ? 'Checking…' : 'Run now'}
+          </button>
+        )}
+      </div>
+      <div className="panel-body stack gap-14">
+        {loading ? (
+          <Spinner />
+        ) : (
+          <>
+            <div className="stat-row">
+              <Stat label="Admin assistant" value={gemini?.admin_assistant ? 'Configured' : 'Not set'} foot="Floating helper on every admin screen" />
+              <Stat label="Support chat" value={gemini?.support_chat ? 'Configured' : 'Not set'} foot="Floating chat on the storefront" />
+              <Stat label="Daily health check" value={gemini?.site_health_check ? 'Configured' : 'Not set'} foot="Runs once a day automatically" />
+            </div>
+
+            {!gemini?.site_health_check ? (
+              <div className="alert warn small">
+                Add <code>ALERT_GEMINI_API_KEY</code> as a repository secret and re-run the deploy to turn the daily
+                check on. (<code>ADMIN_GEMINI_API_KEY</code> and <code>SUPPORT_GEMINI_API_KEY</code> switch on the
+                two chat widgets the same way.)
+              </div>
+            ) : health?.error ? (
+              <div className="alert warn small">Last attempt failed: {health.error}</div>
+            ) : health?.status ? (
+              <div className={`alert ${alertClass} small`} style={{ whiteSpace: 'pre-wrap' }}>
+                {health.summary}
+                <div className="tiny dim" style={{ marginTop: 8 }}>
+                  {health.checked_at ? `Checked ${relativeTime(health.checked_at)}` : ''}
+                </div>
+              </div>
+            ) : (
+              <Empty icon="🩺" title="Hasn't run yet" hint="Runs automatically once a day — or press Run now above." />
+            )}
+
+            {gemini?.site_health_check && !health?.status && (
+              <p className="tiny dim">
+                Add the <strong>Live storefront URL</strong> in Settings so the check can also confirm the live site
+                itself is reachable, not just the dashboard's own numbers.
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Weekly developer report ─────────────────────────── */
+
+interface DevReportStatus {
+  doc_id: string;
+  sheet1_id: string;
+  sheet2_id: string;
+  status: 'ok' | 'warning' | 'error' | null;
+  summary: string;
+  checked_at: number | null;
+  error: string;
+}
+
+/**
+ * A weekly "how did the whole platform do" report — sales trend, errors,
+ * how the other three Gemini features are holding up, and real staff
+ * activity from the audit log — written to a Google Doc and up to two
+ * Google Sheets the owner shares with the service account (Editor access).
+ * Runs on its own every Monday; this panel is for connecting the
+ * destinations once and checking in on the latest result.
+ */
+function DevReportPanel() {
+  const toast = useToast();
+  const [gemini, setGemini] = useState<GeminiStatus | null>(null);
+  const [report, setReport] = useState<DevReportStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [docUrl, setDocUrl] = useState('');
+  const [sheet1Url, setSheet1Url] = useState('');
+  const [sheet2Url, setSheet2Url] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  function load() {
+    setLoading(true);
+    Promise.all([
+      api<GeminiStatus>('/api/admin/gemini/status', { auth: true }),
+      api<DevReportStatus>('/api/admin/dev-report/status', { auth: true }),
+    ])
+      .then(([g, r]) => {
+        setGemini(g);
+        setReport(r);
+      })
+      .catch(() => undefined)
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  const connected = Boolean(report?.doc_id || report?.sheet1_id || report?.sheet2_id);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await api('/api/admin/dev-report/connect', {
+        method: 'POST',
+        auth: true,
+        body: { doc_url: docUrl.trim(), sheet1_url: sheet1Url.trim(), sheet2_url: sheet2Url.trim() },
+      });
+      toast('Report destinations saved', 'success');
+      setEditing(false);
+      setDocUrl('');
+      setSheet1Url('');
+      setSheet2Url('');
+      load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not save', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function runNow() {
+    setRunning(true);
+    try {
+      const res = await api<{ ok: boolean; error: string; doc_written: boolean; sheet1_written: boolean; sheet2_written: boolean }>(
+        '/api/admin/dev-report/run',
+        { method: 'POST', auth: true },
+      );
+      if (res.ok) toast('Weekly report generated', 'success');
+      else toast(res.error, 'error');
+      load();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not run the report', 'error');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const alertClass = report?.status === 'ok' ? 'success' : report?.status === 'error' ? 'error' : 'warn';
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Weekly developer report</h3>
+          <p className="tiny dim">Sales, errors, AI feature health &amp; staff activity — written every Monday.</p>
+        </div>
+        {gemini?.dev_report && (
+          <button className="btn ghost sm" disabled={running} onClick={runNow}>
+            {running ? 'Writing…' : 'Run now'}
+          </button>
+        )}
+      </div>
+      <div className="panel-body stack gap-14">
+        {loading ? (
+          <Spinner />
+        ) : !gemini?.dev_report ? (
+          <div className="alert warn small">
+            Add <code>DEVLOPER_REPORT_GEMENI</code> as a repository secret and re-run the deploy to turn this on.
+          </div>
+        ) : (
+          <>
+            {!connected || editing ? (
+              <form className="stack gap-10" onSubmit={save}>
+                <p className="small muted">
+                  Paste the Google Doc and up to two Google Sheets you've shared with the service account (Editor
+                  access). Each week's report is appended to whichever of these are filled in — leave any blank to
+                  skip it.
+                </p>
+                <div className="field">
+                  <label>Google Doc</label>
+                  <input
+                    className="input"
+                    placeholder="https://docs.google.com/document/d/..."
+                    value={docUrl}
+                    onChange={(e) => setDocUrl(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label>Google Sheet 1</label>
+                  <input
+                    className="input"
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    value={sheet1Url}
+                    onChange={(e) => setSheet1Url(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label>Google Sheet 2</label>
+                  <input
+                    className="input"
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    value={sheet2Url}
+                    onChange={(e) => setSheet2Url(e.target.value)}
+                  />
+                </div>
+                <div className="row gap-8">
+                  <button className="btn primary" type="submit" disabled={saving}>
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                  {connected && (
+                    <button type="button" className="btn ghost" onClick={() => setEditing(false)}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+            ) : (
+              <>
+                <div className="row gap-8 wrap-row between">
+                  <div className="stack gap-4">
+                    {report?.doc_id && (
+                      <a href={`https://docs.google.com/document/d/${report.doc_id}/edit`} target="_blank" rel="noreferrer" className="small">
+                        Open the report doc ↗
+                      </a>
+                    )}
+                    {report?.sheet1_id && (
+                      <a href={`https://docs.google.com/spreadsheets/d/${report.sheet1_id}/edit`} target="_blank" rel="noreferrer" className="small">
+                        Open sheet 1 ↗
+                      </a>
+                    )}
+                    {report?.sheet2_id && (
+                      <a href={`https://docs.google.com/spreadsheets/d/${report.sheet2_id}/edit`} target="_blank" rel="noreferrer" className="small">
+                        Open sheet 2 ↗
+                      </a>
+                    )}
+                  </div>
+                  <button className="btn ghost sm" onClick={() => setEditing(true)}>
+                    Edit destinations
+                  </button>
+                </div>
+
+                {report?.error && <div className="alert warn small">{report.error}</div>}
+                {report?.status ? (
+                  <div className={`alert ${alertClass} small`} style={{ whiteSpace: 'pre-wrap' }}>
+                    {report.summary}
+                    <div className="tiny dim" style={{ marginTop: 8 }}>
+                      {report.checked_at ? `Written ${relativeTime(report.checked_at)}` : ''}
+                    </div>
+                  </div>
+                ) : (
+                  <Empty icon="📋" title="No report yet" hint="Runs automatically every Monday — or press Run now above for a real test right now." />
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Analytics() {
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
@@ -633,6 +953,11 @@ export function Analytics() {
           <h1>Google Analytics, Tag Manager &amp; Sheets</h1>
           <p className="small muted">Real data, read and written straight from your connected Google account.</p>
         </div>
+      </div>
+
+      <div className="stack gap-20" style={{ marginBottom: 20 }}>
+        <HealthCheckPanel />
+        <DevReportPanel />
       </div>
 
       {!status?.connected ? (

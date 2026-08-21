@@ -91,3 +91,51 @@ export async function syncSpreadsheet(env: Env, spreadsheetId: string, pages: Sh
 
   return { ok: true, data: null };
 }
+
+/**
+ * A different write shape from `syncSpreadsheet` above: instead of fully
+ * replacing a tab each run, this ensures the tab (and its header row) exist
+ * once, then appends one more row — for a log that should keep growing week
+ * over week (the developer report) rather than being a live snapshot that
+ * only ever reflects "right now".
+ */
+export async function appendLogRow(
+  env: Env,
+  spreadsheetId: string,
+  sheetTitle: string,
+  header: (string | number)[],
+  row: (string | number)[],
+): Promise<SheetsResult<null>> {
+  const auth = await googleAccessToken(env, SCOPE);
+  const early = fromAuth<null>(auth);
+  if (early) return early;
+  const token = (auth as { ok: true; token: string }).token;
+
+  const meta = await call<{ sheets?: { properties: { title: string } }[] }>(token, `/${spreadsheetId}?fields=sheets.properties.title`);
+  if (!meta.ok) return meta;
+  const exists = (meta.data.sheets ?? []).some((s) => s.properties.title === sheetTitle);
+
+  if (!exists) {
+    const created = await call(token, `/${spreadsheetId}:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: sheetTitle } } }] }),
+    });
+    if (!created.ok) return created;
+
+    const headerWrite = await call(token, `/${spreadsheetId}/values/${encodeURIComponent(`${sheetTitle}!A1`)}?valueInputOption=USER_ENTERED`, {
+      method: 'PUT',
+      body: JSON.stringify({ values: [header] }),
+    });
+    if (!headerWrite.ok) return headerWrite;
+  }
+
+  // `append` finds the next empty row itself — no need to track one.
+  const appended = await call(
+    token,
+    `/${spreadsheetId}/values/${encodeURIComponent(`${sheetTitle}!A1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method: 'POST', body: JSON.stringify({ values: [row] }) },
+  );
+  if (!appended.ok) return appended;
+
+  return { ok: true, data: null };
+}
