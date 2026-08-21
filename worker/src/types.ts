@@ -44,6 +44,15 @@ export interface Env {
   ADMIN_GEMINI_API_KEY?: string;
   SUPPORT_GEMINI_API_KEY?: string;
   ALERT_GEMINI_API_KEY?: string;
+  /**
+   * A fourth Gemini key, kept separate from the three above for the same
+   * reason: this one writes the weekly developer/ops report and must never
+   * be starved by, or itself starve, an admin's live chat. The spelling is
+   * intentionally exactly as the owner named the repository secret when
+   * they created it — renaming it here would silently disconnect this
+   * feature from the key they actually added.
+   */
+  DEVLOPER_REPORT_GEMENI?: string;
 }
 
 export interface AdminClaims {

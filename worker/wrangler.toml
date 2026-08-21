@@ -14,13 +14,15 @@ workers_dev = true
 [observability]
 enabled = true
 
-# Two schedules: hourly keeps the connected Google Sheet current without
+# Three schedules: hourly keeps the connected Google Sheet current without
 # anyone having to remember to press "Sync now" (a cheap no-op until a sheet
 # is actually connected); once a day (02:00 UTC ≈ 08:00 in Bangladesh) runs
-# the Gemini-powered site health check (a no-op until ALERT_GEMINI_API_KEY is
-# set). index.ts's scheduled() tells the two apart by event.cron.
+# the Gemini-powered site health check; once a week, Monday 03:00 UTC ≈
+# 09:00 Bangladesh Monday morning, runs the Gemini-powered developer report.
+# Both Gemini crons are no-ops until their own API key is set.
+# index.ts's scheduled() tells the three apart by event.cron.
 [triggers]
-crons = ["0 * * * *", "0 2 * * *"]
+crons = ["0 * * * *", "0 2 * * *", "0 3 * * 1"]
 
 # `database_id` is filled in by scripts/bootstrap-cf.mjs during deploy, which
 # creates the database on first run and reuses it afterwards.

@@ -15,8 +15,10 @@ import { reviews } from './routes/reviews';
 import { support } from './routes/support';
 import { runSheetsSync } from './lib/sheetsSync';
 import { runHealthCheck } from './lib/healthCheck';
+import { runDevReport } from './lib/devReport';
 
 const DAILY_HEALTH_CHECK_CRON = '0 2 * * *';
+const WEEKLY_DEV_REPORT_CRON = '0 3 * * 1';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -82,24 +84,42 @@ app.route('/api/admin', admin);
 
 app.notFound((c) => c.json({ error: `No route for ${c.req.method} ${new URL(c.req.url).pathname}` }, 404));
 
-app.onError((err, c) => {
+app.onError(async (err, c) => {
   if (err instanceof HTTPException) {
     return c.json({ error: err.message }, err.status);
   }
   console.error('Unhandled error:', err);
+  // Real, unexpected failures only — not the routine 400/401/404s above,
+  // which are expected client-driven rejections rather than bugs. This is
+  // the honest "admin dashboard error" / "storefront error" signal the
+  // weekly developer report reads from (devReport.ts) — best-effort, so a
+  // logging failure never masks the actual error response below.
+  try {
+    const path = new URL(c.req.url).pathname;
+    await c.env.DB.prepare('INSERT INTO error_log (path, status, message, is_admin) VALUES (?, 500, ?, ?)')
+      .bind(path, String(err instanceof Error ? err.message : err).slice(0, 500), path.startsWith('/api/admin') ? 1 : 0)
+      .run();
+  } catch {
+    /* logging must never block the actual error response */
+  }
   return c.json({ error: 'Something went wrong on our side. Please try again.' }, 500);
 });
 
 export default {
   fetch: app.fetch,
   /**
-   * Fired by the two [triggers] crons in wrangler.toml. The daily one runs
-   * the Gemini site health check; every other firing (the hourly one) syncs
-   * the owner's connected Google Sheet — both are cheap no-ops until their
+   * Fired by the three [triggers] crons in wrangler.toml. The weekly one
+   * runs the Gemini developer report, the daily one runs the Gemini site
+   * health check, and every other firing (the hourly one) syncs the owner's
+   * connected Google Sheet — all three are cheap no-ops until their
    * respective feature is actually configured, so this never needs to check
    * that itself.
    */
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === WEEKLY_DEV_REPORT_CRON) {
+      ctx.waitUntil(runDevReport(env).catch(() => undefined));
+      return;
+    }
     if (event.cron === DAILY_HEALTH_CHECK_CRON) {
       ctx.waitUntil(runHealthCheck(env).catch(() => undefined));
       return;

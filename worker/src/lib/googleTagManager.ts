@@ -17,6 +17,13 @@ import { googleAccessToken, type GoogleAuthResult } from './googleAuth';
 const SCOPE = 'https://www.googleapis.com/auth/tagmanager.readonly';
 const API = 'https://www.googleapis.com/tagmanager/v2';
 
+// The public container ID pasted into web/index.html's own GTM snippet —
+// fixed to the one container this site actually runs, not user-selectable,
+// since there is only ever one right answer for "the container on our
+// site". Exported so admin.ts and devReport.ts share the same constant
+// rather than each hardcoding their own copy of it.
+export const GTM_PUBLIC_ID = 'GTM-MGQ6S4HX';
+
 export type GtmResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 function fromAuth<T>(auth: GoogleAuthResult): GtmResult<T> | null {

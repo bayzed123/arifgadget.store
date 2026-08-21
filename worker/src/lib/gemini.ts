@@ -3,16 +3,21 @@
  * Analytics/Search Console/Sheets integrations, Gemini authenticates with a
  * plain API key — no service-account JWT exchange, no OAuth token to cache.
  *
- * Three independent keys share this one client (ADMIN_GEMINI_API_KEY,
- * SUPPORT_GEMINI_API_KEY, ALERT_GEMINI_API_KEY) — see types.ts for why they
- * are kept separate. Every caller passes which one it means; this file never
- * picks a default, so a missing key always fails loud and specific rather
- * than silently borrowing another feature's key.
+ * Four independent keys share this one client (ADMIN_GEMINI_API_KEY,
+ * SUPPORT_GEMINI_API_KEY, ALERT_GEMINI_API_KEY, DEVLOPER_REPORT_GEMENI) —
+ * see types.ts for why they are kept separate. Every caller passes which one
+ * it means; this file never picks a default, so a missing key always fails
+ * loud and specific rather than silently borrowing another feature's key.
+ *
+ * Every call — successful or not — is logged to D1 (ai_usage_log), fire-
+ * and-forget, so the weekly developer report (devReport.ts) has a real,
+ * un-fabricated record of how much each feature was used and how often it
+ * failed, rather than having to guess.
  */
 
 import type { Env } from '../types';
 
-export type GeminiKeyName = 'ADMIN_GEMINI_API_KEY' | 'SUPPORT_GEMINI_API_KEY' | 'ALERT_GEMINI_API_KEY';
+export type GeminiKeyName = 'ADMIN_GEMINI_API_KEY' | 'SUPPORT_GEMINI_API_KEY' | 'ALERT_GEMINI_API_KEY' | 'DEVLOPER_REPORT_GEMENI';
 
 export type GeminiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -43,6 +48,17 @@ interface GeminiApiResponse {
   error?: { message?: string; status?: string };
 }
 
+/** Best-effort — a logging failure must never take down the actual feature. */
+async function logUsage(env: Env, key: GeminiKeyName, result: GeminiResult<string>): Promise<void> {
+  try {
+    await env.DB.prepare('INSERT INTO ai_usage_log (feature, ok, error) VALUES (?, ?, ?)')
+      .bind(key, result.ok ? 1 : 0, result.ok ? '' : result.error.slice(0, 500))
+      .run();
+  } catch {
+    /* the feature's own result still returns normally either way */
+  }
+}
+
 /**
  * One request/response turn. `systemInstruction` is the grounding/persona
  * prompt (rebuilt fresh per call with live data where relevant — never
@@ -55,6 +71,18 @@ export async function geminiGenerate(
   systemInstruction: string,
   history: GeminiTurn[],
   opts: GeminiOptions = {},
+): Promise<GeminiResult<string>> {
+  const result = await callGemini(env, key, systemInstruction, history, opts);
+  await logUsage(env, key, result);
+  return result;
+}
+
+async function callGemini(
+  env: Env,
+  key: GeminiKeyName,
+  systemInstruction: string,
+  history: GeminiTurn[],
+  opts: GeminiOptions,
 ): Promise<GeminiResult<string>> {
   const apiKey = env[key]?.trim();
   if (!apiKey) {
