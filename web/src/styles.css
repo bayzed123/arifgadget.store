@@ -713,7 +713,15 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   flex-direction: column;
   gap: 6px;
 }
-@media (min-width: 900px) { .sidebar { position: sticky; top: 0; height: 100vh; } }
+@media (min-width: 900px) {
+  /* The nav list has grown past one screen's height on most laptops (13+
+     links plus the guide button, notification bell, storefront link, theme
+     toggle and the who/sign-out block) — without its own scroll, sticky +
+     a fixed 100vh just clipped whatever fell off the bottom, with no way to
+     reach it. overscroll-behavior keeps a mouse-wheel scroll here from also
+     scrolling admin-main once it hits the sidebar's own top/bottom. */
+  .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; overscroll-behavior: contain; }
+}
 .sidebar .logo { padding: 4px 8px 18px; color: #fff; }
 .sidebar .logo svg { height: 40px; width: auto; }
 .sidebar a {
