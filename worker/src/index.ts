@@ -91,7 +91,12 @@ app.post('/api/dev-report/trigger/:token', async (c) => {
   if (!expected || c.req.param('token') !== expected) return c.notFound();
 
   const result = await runDevReport(c.env);
-  return c.json(result);
+  // Non-200 on a real failure — the GitHub Actions trigger workflow checks
+  // this status code to decide pass/fail. A flat 200 regardless of result.ok
+  // made a broken Gemini key (or any other write failure) look like a
+  // successful run from the Action's point of view, with the actual error
+  // buried in a response body nobody was looking at.
+  return c.json(result, result.ok ? 200 : 502);
 });
 
 // Nested (not mounted separately) so these inherit the admin auth guard.
