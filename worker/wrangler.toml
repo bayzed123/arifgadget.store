@@ -46,6 +46,10 @@ STORE_NAME = "Arif Gadgets"
 # secret — just an inbox address — so it lives here rather than as a Worker
 # secret. Empty disables the alert; the rest of checkout is unaffected.
 ORDER_ALERT_EMAIL = "gadget02030@gmail.com"
+# Sender for that alert email, on a domain verified in the Resend account
+# (DKIM/SPF/MX records confirmed live). Falls back to Resend's shared sandbox
+# address in email.ts if this is ever unset — see that file for why.
+ALERT_EMAIL_FROM = "Arif Gadgets Alerts <alerts@arifgadget.store>"
 # Browser origins allowed to call the API, comma separated.
 #
 # Left empty the API reflects whatever origin asks, which is the right default
