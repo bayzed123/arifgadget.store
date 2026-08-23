@@ -84,15 +84,10 @@ jobs:
           # secret. Optional: unset leaves the Analytics panel reporting itself
           # as not connected, same as an unset courier key.
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          # Four separate Gemini API keys, one per feature — see
-          # provision-secrets.mjs for why they're kept separate. Each is
-          # optional on its own; unset just leaves that one feature reporting
-          # itself as not configured. DEVLOPER_REPORT_GEMENI keeps the exact
-          # spelling of the repository secret the owner created.
-          ADMIN_GEMINI_API_KEY: ${{ secrets.ADMIN_GEMINI_API_KEY }}
-          SUPPORT_GEMINI_API_KEY: ${{ secrets.SUPPORT_GEMINI_API_KEY }}
-          ALERT_GEMINI_API_KEY: ${{ secrets.ALERT_GEMINI_API_KEY }}
-          DEVLOPER_REPORT_GEMENI: ${{ secrets.DEVLOPER_REPORT_GEMENI }}
+          # No Gemini API keys here any more — the admin assistant, support
+          # chat, daily health check, and weekly developer report all run on
+          # Cloudflare Workers AI now (see worker/src/lib/ai.ts), via the
+          # [ai] binding in wrangler.toml rather than a per-feature secret.
           # Secret path segment for the weekly dev report's manual GitHub
           # Actions trigger. Optional: unset just means that trigger button
           # 404s and the report still runs on its Monday cron / Run now.

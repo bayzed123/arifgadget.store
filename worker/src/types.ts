@@ -34,25 +34,17 @@ export interface Env {
    */
   GOOGLE_SERVICE_ACCOUNT_JSON?: string;
   /**
-   * Three separate Gemini API keys, one per feature, kept apart on purpose:
-   * a public, unauthenticated chat (support) can burn through its own quota
-   * without ever touching the key the owner's private admin assistant runs
-   * on, and the daily health check runs on a third again — one feature
-   * misbehaving never disables another. Each is optional; without it that
-   * one feature reports itself as not configured.
+   * Cloudflare Workers AI — powers the admin assistant, support chat, daily
+   * health check, and weekly developer report (see lib/ai.ts). Optional in
+   * the type only to mirror MEDIA's pattern (an account without Workers AI
+   * enabled loses these features gracefully rather than the Worker failing
+   * to boot); in practice every account gets Workers AI's free tier with no
+   * signup or billing card needed. Replaced four separate Gemini API keys
+   * this codebase used to carry after the Google Cloud project behind them
+   * was denied access to the Gemini API outright — see lib/ai.ts's own
+   * comment for the full story.
    */
-  ADMIN_GEMINI_API_KEY?: string;
-  SUPPORT_GEMINI_API_KEY?: string;
-  ALERT_GEMINI_API_KEY?: string;
-  /**
-   * A fourth Gemini key, kept separate from the three above for the same
-   * reason: this one writes the weekly developer/ops report and must never
-   * be starved by, or itself starve, an admin's live chat. The spelling is
-   * intentionally exactly as the owner named the repository secret when
-   * they created it — renaming it here would silently disconnect this
-   * feature from the key they actually added.
-   */
-  DEVLOPER_REPORT_GEMENI?: string;
+  AI?: Ai;
   /**
    * Secret path segment that fires the weekly developer report on demand —
    * the GitHub Actions "Run workflow" button, for when Monday's cron or the

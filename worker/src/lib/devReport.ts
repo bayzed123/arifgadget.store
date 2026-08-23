@@ -4,9 +4,9 @@
  * signals only (order/stock/rating numbers, the error_log and ai_usage_log
  * tables every other part of the Worker already writes to, the existing
  * audit_log of staff actions, and — where connected — GA4, Search Console
- * and Tag Manager), hands them to Gemini (DEVLOPER_REPORT_GEMENI) to turn
- * into one readable report, and appends that report to a Google Doc and two
- * Google Sheets the owner shared with the service account.
+ * and Tag Manager), hands them to Workers AI to turn into one readable
+ * report, and appends that report to a Google Doc and two Google Sheets the
+ * owner shared with the service account.
  *
  * "Admin staff behaviour" deliberately comes from audit_log, not from
  * sending GA4 events on /admin routes: analytics.ts already excludes every
@@ -18,7 +18,7 @@
  */
 
 import type { Env } from '../types';
-import { geminiGenerate, geminiConfigured } from './gemini';
+import { aiGenerate, aiConfigured } from './ai';
 import { googleConfigured } from './googleAuth';
 import { ga4Summary } from './googleAnalytics';
 import { searchConsoleSummary } from './searchConsole';
@@ -146,7 +146,7 @@ async function gatherSignals(env: Env): Promise<Record<string, unknown>> {
       storefront: errorsThisWeek?.storefront_errors ?? 0,
       most_frequent: (topErrors.results ?? []).map((r) => ({ path: r.path, message: r.message, count: r.n })),
     },
-    gemini_features_usage_this_week: (aiUsage.results ?? []).map((r) => ({
+    ai_features_usage_this_week: (aiUsage.results ?? []).map((r) => ({
       feature: r.feature,
       successful_calls: r.ok_count,
       failed_calls: r.error_count,
@@ -221,7 +221,7 @@ What goes in each field:
 - overall: sales trend (this week vs the prior week), stock and rating health — a couple of sentences.
 - website_performance: GA4 traffic/conversions and Search Console clicks/impressions this week if connected, and what the Tag Manager container looks like. If not connected, say so plainly instead of guessing.
 - errors_reliability: what broke this week (from errors_this_week), how often, and whether it looks worth fixing.
-- ai_features: usage and error rate this week for the admin assistant, support chat, daily health check, and this report itself, from gemini_features_usage_this_week. Call out anything that looks like a rate limit (a "quota"/"RESOURCE_EXHAUSTED"/429-style message) explicitly — it will fix itself once Google's limit resets, so say that plainly rather than treating it as broken.
+- ai_features: usage and error rate this week for the admin assistant, support chat, daily health check, and this report itself, from ai_features_usage_this_week. Call out anything that looks like the daily free Workers AI allocation running out explicitly — it resets the next day, so say that plainly rather than treating it as broken.
 - staff_activity: who did what this week, from admin_staff_activity_this_week. If it is empty, say plainly that no staff activity was recorded this week rather than inventing any.
 - compared_to_last_week: anything recurring across both weeks, or that changed, from last_weeks_report. If there is no prior report, say this is the first one.
 - action_items: 3 to 5 short, prioritised, most-important-first strings — the things most worth doing next. If genuinely nothing needs attention, return a single item saying so rather than manufacturing busy-work.
@@ -243,7 +243,7 @@ interface ReportJson {
   action_items: string[];
 }
 
-/** Belt and suspenders: strips markdown syntax even though the prompt already asks Gemini not to use it. */
+/** Belt and suspenders: strips markdown syntax even though the prompt already asks the model not to use it. */
 function plain(s: string): string {
   return String(s ?? '')
     .replace(/^#{1,6}\s*/gm, '')
@@ -254,9 +254,9 @@ function plain(s: string): string {
 }
 
 /**
- * Parses Gemini's JSON reply into the report's sections. Falls back to
+ * Parses the model's JSON reply into the report's sections. Falls back to
  * treating the whole reply as the "overall" section (still real, still
- * Gemini's own words — never fabricated) if it did not come back as the
+ * the model's own words — never fabricated) if it did not come back as the
  * requested JSON shape, so one malformed reply degrades gracefully instead
  * of losing the report entirely.
  */
@@ -289,6 +289,31 @@ function parseReport(reply: string): ReportJson {
   }
 }
 
+/** Constrains Workers AI's response_format so the reply is guaranteed valid JSON matching ReportJson — see ai.ts's jsonSchema option. */
+const REPORT_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['ok', 'warning', 'error'] },
+    overall: { type: 'string' },
+    website_performance: { type: 'string' },
+    errors_reliability: { type: 'string' },
+    ai_features: { type: 'string' },
+    staff_activity: { type: 'string' },
+    compared_to_last_week: { type: 'string' },
+    action_items: { type: 'array', items: { type: 'string' } },
+  },
+  required: [
+    'status',
+    'overall',
+    'website_performance',
+    'errors_reliability',
+    'ai_features',
+    'staff_activity',
+    'compared_to_last_week',
+    'action_items',
+  ],
+} as const;
+
 const SECTION_TITLES: Record<Exclude<keyof ReportJson, 'status' | 'action_items'>, string> = {
   overall: 'Overall this week',
   website_performance: 'Website performance & search',
@@ -316,12 +341,12 @@ function bdDateLabel(unixSeconds: number): string {
 export async function runDevReport(env: Env): Promise<DevReportResult> {
   const now = Math.floor(Date.now() / 1000);
 
-  if (!geminiConfigured(env, 'DEVLOPER_REPORT_GEMENI')) {
+  if (!aiConfigured(env)) {
     return {
       ok: false,
       status: null,
       summary: '',
-      error: 'DEVLOPER_REPORT_GEMENI is not set — the weekly developer report does not run.',
+      error: 'Workers AI is not available — the weekly developer report does not run.',
       doc_written: false,
       sheet1_written: false,
       sheet2_written: false,
@@ -330,12 +355,12 @@ export async function runDevReport(env: Env): Promise<DevReportResult> {
   }
 
   const signals = await gatherSignals(env);
-  const result = await geminiGenerate(
+  const result = await aiGenerate(
     env,
-    'DEVLOPER_REPORT_GEMENI',
+    'dev_report',
     RULES,
     [{ role: 'user', text: `SIGNALS FOR THE LAST 7 DAYS:\n${JSON.stringify(signals, null, 2)}` }],
-    { temperature: 0.3, maxOutputTokens: 3072, responseMimeType: 'application/json' },
+    { temperature: 0.3, maxOutputTokens: 3072, jsonSchema: REPORT_JSON_SCHEMA },
   );
 
   if (!result.ok) {

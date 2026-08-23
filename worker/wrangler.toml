@@ -17,10 +17,9 @@ enabled = true
 # Three schedules: hourly keeps the connected Google Sheet current without
 # anyone having to remember to press "Sync now" (a cheap no-op until a sheet
 # is actually connected); once a day (02:00 UTC ≈ 08:00 in Bangladesh) runs
-# the Gemini-powered site health check; once a week, Monday 03:00 UTC ≈
-# 09:00 Bangladesh Monday morning, runs the Gemini-powered developer report.
-# Both Gemini crons are no-ops until their own API key is set.
-# index.ts's scheduled() tells the three apart by event.cron.
+# the Workers-AI-powered site health check; once a week, Monday 03:00 UTC ≈
+# 09:00 Bangladesh Monday morning, runs the Workers-AI-powered developer
+# report. index.ts's scheduled() tells the three apart by event.cron.
 [triggers]
 crons = ["0 * * * *", "0 2 * * *", "0 3 * * 1"]
 
@@ -39,6 +38,13 @@ bucket_name = "arif-gadgets-media"
 [[kv_namespaces]]
 binding = "CACHE"
 id = "00000000000000000000000000000000"
+
+# Powers the admin assistant, support chat, daily health check, and weekly
+# developer report (see src/lib/ai.ts). No key or account setup needed —
+# authenticated by this same Cloudflare account, with its own free daily
+# allocation. Only one AI binding is allowed per Worker.
+[ai]
+binding = "AI"
 
 [vars]
 STORE_NAME = "Arif Gadgets"

@@ -13,15 +13,14 @@
  * Fast path: the handful of questions almost every visitor actually asks —
  * delivery charge, payment methods, order tracking, return/warranty policy,
  * contact info — are answered directly from this same real data, with no
- * Gemini call at all. That is the entire latency difference: a D1 read
- * instead of a network round trip to an LLM. Anything that doesn't match
- * one of those still goes to Gemini exactly as before — a genuinely unusual
- * question taking longer is fine; a common one taking several seconds
- * wasn't.
+ * AI call at all. That is the entire latency difference: a D1 read instead
+ * of an inference call. Anything that doesn't match one of those still goes
+ * to Workers AI exactly as before — a genuinely unusual question taking
+ * longer is fine; a common one taking several seconds wasn't.
  */
 
 import type { Env } from '../types';
-import { geminiGenerate, geminiConfigured, type GeminiTurn, type GeminiResult } from './gemini';
+import { aiGenerate, aiConfigured, type AiTurn, type AiResult } from './ai';
 import { getPublicSettings } from './catalog';
 import type { StoreSettings } from './pricing';
 
@@ -104,7 +103,7 @@ interface FastRule {
  * Keyword patterns for the questions that make up the bulk of real support
  * chat traffic. Each answer is built from `ctx` (live settings/pages) at
  * call time, never a hardcoded string — the fast path is faster because it
- * skips Gemini, not because it skips being accurate.
+ * skips the AI call, not because it skips being accurate.
  */
 const FAST_RULES: FastRule[] = [
   {
@@ -153,12 +152,12 @@ function fastAnswer(message: string, ctx: StoreContext): string | null {
 }
 
 export function supportAssistantConfigured(env: Env): boolean {
-  return geminiConfigured(env, 'SUPPORT_GEMINI_API_KEY');
+  return aiConfigured(env);
 }
 
 const MAX_HISTORY = 10;
 
-export async function supportAssistantReply(env: Env, history: GeminiTurn[]): Promise<GeminiResult<string>> {
+export async function supportAssistantReply(env: Env, history: AiTurn[]): Promise<AiResult<string>> {
   const trimmed = history.slice(-MAX_HISTORY);
   const ctx = await gatherContext(env);
 
@@ -169,5 +168,5 @@ export async function supportAssistantReply(env: Env, history: GeminiTurn[]): Pr
   }
 
   const system = `${RULES}\n\nSTORE INFO:\n${contextText(ctx)}`;
-  return geminiGenerate(env, 'SUPPORT_GEMINI_API_KEY', system, trimmed, { temperature: 0.5, maxOutputTokens: 512 });
+  return aiGenerate(env, 'support_chat', system, trimmed, { temperature: 0.5, maxOutputTokens: 512 });
 }

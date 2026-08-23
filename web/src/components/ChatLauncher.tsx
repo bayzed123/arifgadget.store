@@ -12,8 +12,8 @@ import { waLink, WhatsAppIcon } from './WhatsAppButton';
  * the other stays out of the way until the chooser is reopened.
  *
  * Hides the AI option entirely (falling back to a plain WhatsApp button,
- * same as before this merge) if SUPPORT_GEMINI_API_KEY was never
- * configured — never a chooser with an option that can only fail.
+ * same as before this merge) if Workers AI is not available — never a
+ * chooser with an option that can only fail.
  */
 
 interface Turn {
