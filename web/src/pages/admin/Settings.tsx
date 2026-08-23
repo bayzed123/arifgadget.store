@@ -440,10 +440,15 @@ export function Settings() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  // The activity log is for management (owner + admin) — see the /admin/audit
+  // route. A plain 'staff' account never requests it, never sees the panel,
+  // and gets a 403 if it somehow tried the endpoint directly.
+  const canSeeAudit = admin?.role === 'owner' || admin?.role === 'admin';
+
   useEffect(() => {
     Promise.all([
       api<{ settings: { key: string; value: string }[] }>('/api/admin/settings', { auth: true }),
-      api<{ entries: AuditEntry[] }>('/api/admin/audit?limit=40', { auth: true }),
+      canSeeAudit ? api<{ entries: AuditEntry[] }>('/api/admin/audit?limit=40', { auth: true }) : Promise.resolve(null),
     ])
       .then(([settings, log]) => {
         const map: Record<string, string> = {};
@@ -451,10 +456,11 @@ export function Settings() {
           map[row.key] = MONEY_KEYS.has(row.key) ? String(Number(row.value) / 100) : row.value;
         }
         setValues(map);
-        setAudit(log.entries);
+        if (log) setAudit(log.entries);
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function save(event: FormEvent) {
@@ -557,6 +563,7 @@ export function Settings() {
           </div>
         </form>
 
+        {canSeeAudit && (
         <div className="panel">
           <div className="panel-head">
             <div>
@@ -594,6 +601,7 @@ export function Settings() {
             )}
           </div>
         </div>
+        )}
       </div>
 
       <div style={{ marginTop: 24 }}>

@@ -19,12 +19,13 @@ interface StaffRow {
 const EMPTY_FORM = { username: '', name: '', password: '', role: 'staff' as 'staff' | 'admin', security_question: '', security_answer: '' };
 
 /**
- * Owner-only. Creates the login a staff member actually signs in with, sets
- * the security question their own "Forgot password?" link on the sign-in
- * page will use, and lets the owner deactivate someone without deleting
- * them — audit_log keeps pointing at a real name either way. Nothing here
- * about the weekly developer report or any other owner-only feature; this
- * page is purely account management.
+ * Owner and admin — not plain staff. Creates the login a staff member
+ * actually signs in with, sets the security question their own "Forgot
+ * password?" link on the sign-in page will use, and lets an owner/admin
+ * deactivate someone without deleting them — audit_log keeps pointing at a
+ * real name either way. Nothing here about the weekly developer report or
+ * any other feature that stays off this dashboard entirely; this page is
+ * purely account management.
  */
 export function Staff() {
   const { admin } = useAuth();
@@ -46,11 +47,11 @@ export function Staff() {
 
   useEffect(load, []);
 
-  if (admin?.role !== 'owner') {
+  if (admin?.role !== 'owner' && admin?.role !== 'admin') {
     return (
       <div className="panel">
         <div className="panel-body">
-          <Empty icon="🔒" title="Owner account required" hint="Only the shop owner can manage staff logins." />
+          <Empty icon="🔒" title="Owner or admin account required" hint="Only management accounts can manage staff logins." />
         </div>
       </div>
     );

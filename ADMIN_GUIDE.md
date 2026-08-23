@@ -388,9 +388,6 @@ The **Footer build credits** shown at the bottom of that panel are fixed. They
 are displayed for reference but cannot be edited from the dashboard by any role,
 and the API rejects any attempt to change them.
 
-The **Activity log** beside the settings shows every change any staff member has
-made: products created, prices edited, stock adjusted, orders moved.
-
 ---
 
 ## 11. Pages, blog and press coverage
@@ -551,7 +548,8 @@ No. Past orders point at it. Create a new product and archive the old one.
 So every change carries a reason and lands in the ledger. Use the stock dialog.
 
 **Two staff members changed the same thing.**
-Check the **Activity log** in Settings — it records who did what and when.
+Check the **Stock ledger** on the Inventory page for stock changes; for anything
+else, the order or product's own history shows the most recent edit.
 
 **Someone ordered the last item twice.**
 They cannot. The database refuses any order that would take stock below zero;
