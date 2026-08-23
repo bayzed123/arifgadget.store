@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, useTheme } from '../../lib/store';
 import { Logo } from '../../components/Logo';
 import { Spinner } from '../../components/ui';
@@ -38,12 +39,126 @@ export function AdminLayout() {
   useSeo({ title: 'Admin', noindex: true });
   const { admin, ready, signOut } = useAuth();
   const [theme, setTheme] = useTheme();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const location = useLocation();
+
+  // Close the mobile drawer on every navigation — a drawer left open behind
+  // a new page is the most common bug in this pattern (see MenuDrawer.tsx).
+  useEffect(() => setMenuOpen(false), [location.pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [menuOpen]);
 
   if (!ready) return <Spinner />;
   if (!admin) return <Login />;
 
+  const canSeeStaff = admin?.role === 'owner' || admin?.role === 'admin';
+
   return (
     <div className="admin">
+      {/* Mobile only (see .admin-topbar in styles.css) — the full sidebar
+          below is hidden under 900px so it never dumps 12+ links above the
+          page content. Hamburger on the left opens the same nav as a
+          slide-in drawer; the bell stays reachable on the right. */}
+      <header className="admin-topbar">
+        <button
+          type="button"
+          className="admin-topbar-btn"
+          onClick={() => setMenuOpen(true)}
+          aria-label="Open admin menu"
+          aria-expanded={menuOpen}
+        >
+          <span aria-hidden="true">☰</span>
+        </button>
+        <NavLink to="/" className="admin-topbar-logo" aria-label="Arif Gadgets">
+          <Logo />
+        </NavLink>
+        <NotificationBell compact />
+      </header>
+
+      <div className={`drawer-root admin-menu-drawer ${menuOpen ? 'open' : ''}`} aria-hidden={!menuOpen}>
+        <div className="drawer-backdrop" onClick={() => setMenuOpen(false)} />
+        <nav className="drawer" aria-label="Admin menu">
+          <header className="drawer-head">
+            <span>Admin menu</span>
+            <button onClick={() => setMenuOpen(false)} aria-label="Close menu">
+              ✕
+            </button>
+          </header>
+
+          <div className="drawer-list">
+            {NAV.map((item) => (
+              <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => (isActive ? 'accent' : '')}>
+                <span className="ic" aria-hidden="true">
+                  {item.icon}
+                </span>
+                <span className="nm">{item.label}</span>
+                <span className="chev" aria-hidden="true">
+                  ›
+                </span>
+              </NavLink>
+            ))}
+            {canSeeStaff && (
+              <NavLink to={OWNER_NAV.to} className={({ isActive }) => (isActive ? 'accent' : '')}>
+                <span className="ic" aria-hidden="true">
+                  {OWNER_NAV.icon}
+                </span>
+                <span className="nm">{OWNER_NAV.label}</span>
+                <span className="chev" aria-hidden="true">
+                  ›
+                </span>
+              </NavLink>
+            )}
+            <NavLink to="/admin/guide">
+              <span className="ic" aria-hidden="true">
+                📖
+              </span>
+              <span className="nm">বাংলা গাইড</span>
+              <span className="chev" aria-hidden="true">
+                ›
+              </span>
+            </NavLink>
+          </div>
+
+          <div className="drawer-list secondary">
+            <NavLink to="/">
+              <span className="ic" aria-hidden="true">
+                🏬
+              </span>
+              <span className="nm">View storefront</span>
+              <span className="chev" aria-hidden="true">
+                ›
+              </span>
+            </NavLink>
+            <button type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+              <span className="ic" aria-hidden="true">
+                {theme === 'dark' ? '☀️' : '🌙'}
+              </span>
+              <span className="nm">{theme === 'dark' ? 'Light theme' : 'Dark theme'}</span>
+            </button>
+            <button type="button" onClick={signOut}>
+              <span className="ic" aria-hidden="true">
+                🚪
+              </span>
+              <span className="nm">
+                Sign out — <span className="dim">{admin.name}</span>
+              </span>
+            </button>
+          </div>
+        </nav>
+      </div>
+
       <nav className="sidebar" aria-label="Admin navigation">
         <NavLink to="/" className="logo" style={{ background: 'none' }}>
           <Logo />
@@ -56,7 +171,7 @@ export function AdminLayout() {
           </NavLink>
         ))}
 
-        {(admin?.role === 'owner' || admin?.role === 'admin') && (
+        {canSeeStaff && (
           <NavLink to={OWNER_NAV.to} className={({ isActive }) => (isActive ? 'active' : '')}>
             <span aria-hidden="true">{OWNER_NAV.icon}</span>
             {OWNER_NAV.label}
