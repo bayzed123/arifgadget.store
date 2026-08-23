@@ -100,6 +100,20 @@ if (value) {
 // ai.ts's own comment for the full story.
 
 /**
+ * Optional second, independent free provider for the same four AI features
+ * — tried only when Workers AI itself fails (see lib/ai.ts). Absent is
+ * fine: everything keeps running on Workers AI alone.
+ */
+if (process.env.GROQ_API_KEY) {
+  await put('GROQ_API_KEY', process.env.GROQ_API_KEY);
+  console.log('GROQ_API_KEY set from the repository secret.');
+} else if (names.has('GROQ_API_KEY')) {
+  console.log('GROQ_API_KEY already present on the Worker — left unchanged.');
+} else {
+  console.log('GROQ_API_KEY not provided — the AI features run on Workers AI alone, with no fallback.');
+}
+
+/**
  * Secret path segment for the weekly developer report's manual GitHub
  * Actions trigger (see .github/workflows/dev-report-trigger.yml). Same
  * "absent is fine" rule as everything else here: without it the trigger

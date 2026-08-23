@@ -46,6 +46,13 @@ export interface Env {
    */
   AI?: Ai;
   /**
+   * Optional second, independent free provider — tried only when Workers AI
+   * itself fails (most usefully once the daily free Neuron allocation runs
+   * out). Left unset, every AI feature runs on Workers AI alone. See
+   * lib/ai.ts.
+   */
+  GROQ_API_KEY?: string;
+  /**
    * Secret path segment that fires the weekly developer report on demand —
    * the GitHub Actions "Run workflow" button, for when Monday's cron or the
    * dashboard's Run now isn't convenient. Same shape as
