@@ -226,7 +226,7 @@ export function AdminLayout() {
       <ImageZoom />
 
       {/* Available on every admin screen — see AdminAssistant.tsx. Hides
-          itself if ADMIN_GEMINI_API_KEY was never configured. */}
+          itself if Workers AI is not available. */}
       <AdminAssistant />
     </div>
   );

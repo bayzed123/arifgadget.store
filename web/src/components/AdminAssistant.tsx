@@ -66,8 +66,8 @@ export function AdminAssistant() {
     }
   }
 
-  // Not configured (no ADMIN_GEMINI_API_KEY) — stay out of the way entirely
-  // rather than showing a launcher that can only ever fail.
+  // Not configured (Workers AI not available) — stay out of the way
+  // entirely rather than showing a launcher that can only ever fail.
   if (configured === false) return null;
 
   return (

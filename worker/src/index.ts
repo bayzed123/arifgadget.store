@@ -93,7 +93,7 @@ app.post('/api/dev-report/trigger/:token', async (c) => {
   const result = await runDevReport(c.env);
   // Non-200 on a real failure — the GitHub Actions trigger workflow checks
   // this status code to decide pass/fail. A flat 200 regardless of result.ok
-  // made a broken Gemini key (or any other write failure) look like a
+  // made a broken AI call (or any other write failure) look like a
   // successful run from the Action's point of view, with the actual error
   // buried in a response body nobody was looking at.
   return c.json(result, result.ok ? 200 : 502);
@@ -131,7 +131,7 @@ export default {
   fetch: app.fetch,
   /**
    * Fired by the three [triggers] crons in wrangler.toml. The weekly one
-   * runs the Gemini developer report, the daily one runs the Gemini site
+   * runs the developer report, the daily one runs the site
    * health check, and every other firing (the hourly one) syncs the owner's
    * connected Google Sheet — all three are cheap no-ops until their
    * respective feature is actually configured, so this never needs to check

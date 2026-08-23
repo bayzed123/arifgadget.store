@@ -10,7 +10,7 @@
  */
 
 import type { Env } from '../types';
-import { geminiGenerate, geminiConfigured, type GeminiTurn, type GeminiResult } from './gemini';
+import { aiGenerate, aiConfigured, type AiTurn, type AiResult } from './ai';
 import { courierConfigured } from './steadfast';
 import { googleConfigured } from './googleAuth';
 
@@ -29,7 +29,7 @@ Dashboard screens, and what each is for:
 - Inventory: stock on hand, low-stock and out-of-stock lists.
 - Offers & popup: promotional banners and the storefront's automatic popup.
 - Content: pages, blog posts, and press-coverage entries (a lightweight CMS).
-- Settings: store info and pricing defaults, courier accounts (Steadfast — supports a second merchant account, credentials always masked), the homepage hero banner, and configuration status for the Google and Gemini integrations.
+- Settings: store info and pricing defaults, courier accounts (Steadfast — supports a second merchant account, credentials always masked), the homepage hero banner, and configuration status for the Google and Workers AI integrations.
 - বাংলা গাইড (the Bangla Guide page): a full walkthrough of every screen with explanations — point staff there for anything you are not fully sure how to explain.
 
 Rules:
@@ -106,15 +106,15 @@ async function snapshot(env: Env): Promise<string> {
 }
 
 export function adminAssistantConfigured(env: Env): boolean {
-  return geminiConfigured(env, 'ADMIN_GEMINI_API_KEY');
+  return aiConfigured(env);
 }
 
 const MAX_HISTORY = 12;
 
 /** One reply to a staff conversation. `history` is oldest-first, ending with the new question. */
-export async function adminAssistantReply(env: Env, history: GeminiTurn[]): Promise<GeminiResult<string>> {
+export async function adminAssistantReply(env: Env, history: AiTurn[]): Promise<AiResult<string>> {
   const trimmed = history.slice(-MAX_HISTORY);
   const live = await snapshot(env);
   const system = `${KNOWLEDGE}\n\nLIVE DATA (as of this moment):\n${live}`;
-  return geminiGenerate(env, 'ADMIN_GEMINI_API_KEY', system, trimmed, { temperature: 0.3, maxOutputTokens: 1024 });
+  return aiGenerate(env, 'admin_assistant', system, trimmed, { temperature: 0.3, maxOutputTokens: 1024 });
 }

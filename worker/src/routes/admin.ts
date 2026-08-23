@@ -34,8 +34,8 @@ import { gtmSummary, GTM_PUBLIC_ID } from '../lib/googleTagManager';
 import { parseSpreadsheetId } from '../lib/googleSheets';
 import { runSheetsSync } from '../lib/sheetsSync';
 import { adminAssistantConfigured, adminAssistantReply } from '../lib/adminAssistant';
-import type { GeminiTurn } from '../lib/gemini';
-import { geminiConfigured } from '../lib/gemini';
+import type { AiTurn } from '../lib/ai';
+import { aiConfigured } from '../lib/ai';
 import { supportAssistantConfigured } from '../lib/supportAssistant';
 import { runHealthCheck } from '../lib/healthCheck';
 import { ORDER_STATUSES, STATUS_ALIASES, NEXT_STATUSES, label } from '../lib/checkpoints';
@@ -1627,7 +1627,7 @@ admin.get('/notifications', async (c) => {
   push(lowStock?.n, 'low_stock', (n) => `${n} product${n === 1 ? '' : 's'} running low`, '/admin/inventory');
   push(lowRatings?.n, 'low_ratings', (n) => `${n} low rating${n === 1 ? '' : 's'} in the last 2 weeks`, '/admin/reviews');
 
-  // The daily Gemini health check, surfaced here only while its verdict is
+  // The daily Workers AI health check, surfaced here only while its verdict is
   // both recent (36h — a bit over a day, so one slow cron firing doesn't
   // drop it early) and not "ok" — a clean report is not something to
   // interrupt anyone about.
@@ -1746,7 +1746,7 @@ admin.post('/google/sheets/sync', async (c) => {
   return c.json(result);
 });
 
-/* ══════════════════════════ Admin assistant (Gemini) ══════════════════════════
+/* ══════════════════════════ Admin assistant (Workers AI) ══════════════════════════
  *
  * A chat helper for staff, built into the dashboard — see adminAssistant.ts
  * for how it's grounded (a written knowledge block plus a live D1 snapshot
@@ -1760,11 +1760,11 @@ admin.get('/assistant/status', async (c) => {
 
 admin.post('/assistant/chat', async (c) => {
   if (!adminAssistantConfigured(c.env)) {
-    return c.json({ ok: false, error: 'ADMIN_GEMINI_API_KEY is not set — ask the developer to add it.', reply: '' });
+    return c.json({ ok: false, error: 'Workers AI is not available — ask the developer to check the AI binding.', reply: '' });
   }
   const body = await readJson(c);
   const historyRaw = Array.isArray(body.history) ? body.history : [];
-  const history: GeminiTurn[] = historyRaw
+  const history: AiTurn[] = historyRaw
     .filter((t: unknown): t is { role: string; text: string } => {
       const turn = t as { role?: unknown; text?: unknown };
       return (turn.role === 'user' || turn.role === 'model') && typeof turn.text === 'string' && turn.text.trim().length > 0;
@@ -1780,23 +1780,23 @@ admin.post('/assistant/chat', async (c) => {
   return c.json({ ok: true, error: '', reply: result.data });
 });
 
-/* ══════════════════════════ Site health check (Gemini) ══════════════════════════
+/* ══════════════════════════ Site health check (Workers AI) ══════════════════════════
  *
  * Runs automatically once a day from the Worker's cron (see index.ts); this
- * section is just: a status line for Settings to show which of the three
- * Gemini features are configured, the latest health-check result, and a
- * "Run now" button rather than waiting for tomorrow's cron.
+ * section is just: a status line for Settings to show whether Workers AI is
+ * available, the latest health-check result, and a "Run now" button rather
+ * than waiting for tomorrow's cron.
  */
 
 // Deliberately does not mention the weekly developer report at all — that
 // report is not exposed through the admin dashboard in any form (see
 // devReport.ts and dev-report-trigger.yml); its existence must never
 // surface to a staff or admin account here.
-admin.get('/gemini/status', async (c) => {
+admin.get('/ai/status', async (c) => {
   return c.json({
-    admin_assistant: geminiConfigured(c.env, 'ADMIN_GEMINI_API_KEY'),
+    admin_assistant: aiConfigured(c.env),
     support_chat: supportAssistantConfigured(c.env),
-    site_health_check: geminiConfigured(c.env, 'ALERT_GEMINI_API_KEY'),
+    site_health_check: aiConfigured(c.env),
   });
 });
 

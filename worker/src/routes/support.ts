@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Env, Variables } from '../types';
 import { badRequest, readJson } from '../lib/http';
 import { supportAssistantConfigured, supportAssistantReply } from '../lib/supportAssistant';
-import type { GeminiTurn } from '../lib/gemini';
+import type { AiTurn } from '../lib/ai';
 
 export const support = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -46,7 +46,7 @@ support.post('/chat', async (c) => {
 
   const body = await readJson(c);
   const historyRaw = Array.isArray(body.history) ? body.history : [];
-  const history: GeminiTurn[] = historyRaw
+  const history: AiTurn[] = historyRaw
     .filter((t: unknown): t is { role: string; text: string } => {
       const turn = t as { role?: unknown; text?: unknown };
       return (turn.role === 'user' || turn.role === 'model') && typeof turn.text === 'string' && turn.text.trim().length > 0;

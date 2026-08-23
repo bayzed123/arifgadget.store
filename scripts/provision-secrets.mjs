@@ -89,35 +89,28 @@ if (value) {
   console.log('GOOGLE_SERVICE_ACCOUNT_JSON not provided — the Analytics panel reports itself as not connected.');
 }
 
-/**
- * Gemini API keys — four separate ones, each scoped to one feature, so a
- * problem or a quota limit on one (a public, unauthenticated chat) can never
- * take down another (the owner's own admin assistant). Same "absent is fine"
- * rule as everything else here: without a key that one feature reports
- * itself as not configured rather than the dashboard breaking.
- *
- * DEVLOPER_REPORT_GEMENI is spelled exactly as the owner named it when they
- * created the key and the repository secret — kept as-is on purpose, since
- * "correcting" it here would silently disconnect this script from the
- * secret that actually exists in the repository.
- */
-const GEMINI_SECRETS = {
-  ADMIN_GEMINI_API_KEY: 'the admin assistant reports itself as not configured',
-  SUPPORT_GEMINI_API_KEY: 'the storefront support chat reports itself as not configured',
-  ALERT_GEMINI_API_KEY: 'the daily site health check does not run',
-  DEVLOPER_REPORT_GEMENI: 'the weekly developer report does not run',
-};
+// No Gemini API keys to provision any more — the admin assistant, support
+// chat, daily health check, and weekly developer report all run on
+// Cloudflare Workers AI now (see worker/src/lib/ai.ts), authenticated by
+// this same Cloudflare account via the [ai] binding in wrangler.toml rather
+// than a per-feature secret. This codebase used to carry four separate
+// Gemini keys here (ADMIN_GEMINI_API_KEY, SUPPORT_GEMINI_API_KEY,
+// ALERT_GEMINI_API_KEY, DEVLOPER_REPORT_GEMENI) until the Google Cloud
+// project behind them was denied access to the Gemini API outright — see
+// ai.ts's own comment for the full story.
 
-for (const [name, consequence] of Object.entries(GEMINI_SECRETS)) {
-  const value = process.env[name]?.trim();
-  if (value) {
-    await put(name, value);
-    console.log(`${name} set from the repository secret.`);
-  } else if (names.has(name)) {
-    console.log(`${name} already present on the Worker — left unchanged.`);
-  } else {
-    console.log(`${name} not provided — ${consequence}.`);
-  }
+/**
+ * Optional second, independent free provider for the same four AI features
+ * — tried only when Workers AI itself fails (see lib/ai.ts). Absent is
+ * fine: everything keeps running on Workers AI alone.
+ */
+if (process.env.GROQ_API_KEY) {
+  await put('GROQ_API_KEY', process.env.GROQ_API_KEY);
+  console.log('GROQ_API_KEY set from the repository secret.');
+} else if (names.has('GROQ_API_KEY')) {
+  console.log('GROQ_API_KEY already present on the Worker — left unchanged.');
+} else {
+  console.log('GROQ_API_KEY not provided — the AI features run on Workers AI alone, with no fallback.');
 }
 
 /**

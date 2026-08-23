@@ -3,10 +3,10 @@
  * index.ts / wrangler.toml), gathers real signals from D1 and, if a
  * `site_url` setting has been filled in under Settings, a couple of live
  * fetches against the actual deployed storefront. Those signals (never
- * anything invented) go to Gemini (ALERT_GEMINI_API_KEY) to turn into one
- * short, readable verdict — the same "never fabricate, surface the real
- * thing" rule as every other integration in this codebase, just applied to
- * writing a summary instead of to a number.
+ * anything invented) go to Workers AI to turn into one short, readable
+ * verdict — the same "never fabricate, surface the real thing" rule as
+ * every other integration in this codebase, just applied to writing a
+ * summary instead of to a number.
  *
  * The result is persisted to settings (site_health_status/summary/checked_at)
  * so the dashboard can show it, and so /admin/notifications can surface it
@@ -14,7 +14,7 @@
  */
 
 import type { Env } from '../types';
-import { geminiGenerate, geminiConfigured } from './gemini';
+import { aiGenerate, aiConfigured } from './ai';
 import { courierConfigured, courierBalance } from './steadfast';
 import { googleConfigured } from './googleAuth';
 
@@ -134,14 +134,14 @@ function parseStatus(reply: string): { status: HealthStatus; summary: string } {
 export async function runHealthCheck(env: Env): Promise<HealthCheckResult> {
   const now = Math.floor(Date.now() / 1000);
 
-  if (!geminiConfigured(env, 'ALERT_GEMINI_API_KEY')) {
-    return { ok: false, status: null, summary: '', error: 'ALERT_GEMINI_API_KEY is not set — the daily health check does not run.', checked_at: null };
+  if (!aiConfigured(env)) {
+    return { ok: false, status: null, summary: '', error: 'Workers AI is not available — the daily health check does not run.', checked_at: null };
   }
 
   const signals = await gatherSignals(env);
-  const result = await geminiGenerate(
+  const result = await aiGenerate(
     env,
-    'ALERT_GEMINI_API_KEY',
+    'health_check',
     RULES,
     [{ role: 'user', text: `SIGNALS:\n${JSON.stringify(signals, null, 2)}` }],
     { temperature: 0.2, maxOutputTokens: 512 },

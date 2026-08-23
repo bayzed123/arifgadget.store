@@ -611,7 +611,7 @@ function SheetsPanel() {
 
 /* ─────────────────────────── AI assistants & health check ─────────────────────────── */
 
-interface GeminiStatus {
+interface AiStatus {
   admin_assistant: boolean;
   support_chat: boolean;
   site_health_check: boolean;
@@ -625,14 +625,16 @@ interface HealthStatus {
 }
 
 /**
- * Three independent Gemini-powered features (see gemini.ts on the Worker for
- * why the keys are kept separate): the admin assistant floating on every
- * dashboard screen, the storefront's support chat, and this — a health check
- * that runs once a day on its own and only needs checking in on here.
+ * Three features running on Cloudflare Workers AI (see ai.ts on the
+ * Worker): the admin assistant floating on every dashboard screen, the
+ * storefront's support chat, and this — a health check that runs once a day
+ * on its own and only needs checking in on here. All three share one
+ * binding, so their "configured" status always moves together now — there
+ * is no separate key per feature the way there used to be.
  */
 function HealthCheckPanel() {
   const toast = useToast();
-  const [gemini, setGemini] = useState<GeminiStatus | null>(null);
+  const [ai, setAi] = useState<AiStatus | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -640,11 +642,11 @@ function HealthCheckPanel() {
   function load() {
     setLoading(true);
     Promise.all([
-      api<GeminiStatus>('/api/admin/gemini/status', { auth: true }),
+      api<AiStatus>('/api/admin/ai/status', { auth: true }),
       api<HealthStatus>('/api/admin/health-check/status', { auth: true }),
     ])
-      .then(([g, h]) => {
-        setGemini(g);
+      .then(([a, h]) => {
+        setAi(a);
         setHealth(h);
       })
       .catch(() => undefined)
@@ -674,9 +676,9 @@ function HealthCheckPanel() {
       <div className="panel-head">
         <div>
           <h3>AI assistants &amp; daily health check</h3>
-          <p className="tiny dim">Powered by Gemini — three separate API keys, one per feature.</p>
+          <p className="tiny dim">Powered by Cloudflare Workers AI — no separate keys, runs on this account's free AI allocation.</p>
         </div>
-        {gemini?.site_health_check && (
+        {ai?.site_health_check && (
           <button className="btn ghost sm" disabled={running} onClick={runNow}>
             {running ? 'Checking…' : 'Run now'}
           </button>
@@ -688,16 +690,15 @@ function HealthCheckPanel() {
         ) : (
           <>
             <div className="stat-row">
-              <Stat label="Admin assistant" value={gemini?.admin_assistant ? 'Configured' : 'Not set'} foot="Floating helper on every admin screen" />
-              <Stat label="Support chat" value={gemini?.support_chat ? 'Configured' : 'Not set'} foot="Floating chat on the storefront" />
-              <Stat label="Daily health check" value={gemini?.site_health_check ? 'Configured' : 'Not set'} foot="Runs once a day automatically" />
+              <Stat label="Admin assistant" value={ai?.admin_assistant ? 'Configured' : 'Not set'} foot="Floating helper on every admin screen" />
+              <Stat label="Support chat" value={ai?.support_chat ? 'Configured' : 'Not set'} foot="Floating chat on the storefront" />
+              <Stat label="Daily health check" value={ai?.site_health_check ? 'Configured' : 'Not set'} foot="Runs once a day automatically" />
             </div>
 
-            {!gemini?.site_health_check ? (
+            {!ai?.site_health_check ? (
               <div className="alert warn small">
-                Add <code>ALERT_GEMINI_API_KEY</code> as a repository secret and re-run the deploy to turn the daily
-                check on. (<code>ADMIN_GEMINI_API_KEY</code> and <code>SUPPORT_GEMINI_API_KEY</code> switch on the
-                two chat widgets the same way.)
+                Workers AI is not available on this account yet — add an <code>[ai]</code> binding in
+                wrangler.toml and re-run the deploy to turn these features on.
               </div>
             ) : health?.error ? (
               <div className="alert warn small">Last attempt failed: {health.error}</div>
@@ -712,7 +713,7 @@ function HealthCheckPanel() {
               <Empty icon="🩺" title="Hasn't run yet" hint="Runs automatically once a day — or press Run now above." />
             )}
 
-            {gemini?.site_health_check && !health?.status && (
+            {ai?.site_health_check && !health?.status && (
               <p className="tiny dim">
                 Add the <strong>Live storefront URL</strong> in Settings so the check can also confirm the live site
                 itself is reachable, not just the dashboard's own numbers.
