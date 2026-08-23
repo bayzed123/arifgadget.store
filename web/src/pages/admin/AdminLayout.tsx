@@ -24,8 +24,9 @@ const NAV = [
   { to: '/admin/settings', icon: '⚙️', label: 'Settings' },
 ];
 
-// Owner-only, so it's kept out of NAV above (built for everyone) and added
-// separately, gated on admin.role, right where it's rendered.
+// Management-only (owner + admin, not plain staff), so it's kept out of NAV
+// above (built for everyone) and added separately, gated on admin.role,
+// right where it's rendered.
 const OWNER_NAV = { to: '/admin/staff', icon: '🧑‍💼', label: 'Staff accounts' };
 
 export function AdminLayout() {
@@ -55,7 +56,7 @@ export function AdminLayout() {
           </NavLink>
         ))}
 
-        {admin?.role === 'owner' && (
+        {(admin?.role === 'owner' || admin?.role === 'admin') && (
           <NavLink to={OWNER_NAV.to} className={({ isActive }) => (isActive ? 'active' : '')}>
             <span aria-hidden="true">{OWNER_NAV.icon}</span>
             {OWNER_NAV.label}

@@ -91,18 +91,6 @@ function requireOwner(c: { get: (k: 'admin') => AdminClaims }) {
   }
 }
 
-/**
- * Stricter than requireOwner above on purpose: that one also admits the
- * 'admin' tier, which is right for ordinary settings but wrong for managing
- * staff accounts themselves — creating, deactivating, or changing another
- * account's role is owner-only.
- */
-function requireTrueOwner(c: { get: (k: 'admin') => AdminClaims }) {
-  if (c.get('admin').role !== 'owner') {
-    throw new HTTPException(403, { message: 'Owner account required' });
-  }
-}
-
 /** Security answers are matched case- and whitespace-insensitively — "Dhaka" and "dhaka " must both work. */
 function normalizeAnswer(answer: string): string {
   return answer.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -252,16 +240,17 @@ admin.post('/forgot-password/verify', async (c) => {
 admin.get('/me', (c) => c.json({ admin: c.get('admin') }));
 
 /*
- * Staff accounts — owner-only. Creates the login the owner hands a new
- * staff member, sets the security question/answer that account's own
- * forgot-password flow (see the forgot-password routes further down) will
- * use, and lets the owner deactivate an account without deleting it, so
+ * Staff accounts — owner and admin, not plain staff. Creates the login a new
+ * team member signs in with, sets the security question/answer that account's
+ * own forgot-password flow (see the forgot-password routes further down) will
+ * use, and lets an owner/admin deactivate an account without deleting it, so
  * audit_log keeps pointing at a real name rather than an orphaned one.
- * The owner's own row is never reachable through these routes.
+ * The 'owner' row itself is never reachable through these routes — not even
+ * an 'admin' caller can touch, deactivate, or reassign it.
  */
 
 admin.get('/staff', async (c) => {
-  requireTrueOwner(c);
+  requireOwner(c);
   const { results } = await c.env.DB.prepare(
     `SELECT id, username, name, email, role, active, created_at, last_login_at,
             (security_question IS NOT NULL) AS has_security_question
@@ -286,7 +275,7 @@ admin.get('/staff', async (c) => {
 });
 
 admin.post('/staff', async (c) => {
-  requireTrueOwner(c);
+  requireOwner(c);
   const body = await readJson(c);
   const username = requireString(body.username, 'username', 60).toLowerCase();
   const name = requireString(body.name, 'name', 120);
@@ -322,7 +311,7 @@ admin.post('/staff', async (c) => {
 });
 
 admin.patch('/staff/:id', async (c) => {
-  requireTrueOwner(c);
+  requireOwner(c);
   const id = requireInt(c.req.param('id'), 'id');
 
   const target = await c.env.DB.prepare('SELECT role, username FROM admins WHERE id = ?')
@@ -1122,7 +1111,14 @@ admin.patch('/customers/:id', async (c) => {
   return c.json({ ok: true, active: active === 1 });
 });
 
+// Owner and admin — management can see who changed what, but plain 'staff'
+// accounts get no nav link, no panel, and a 403 if they ever hit this URL
+// directly. Deliberately unrelated to the weekly dev report: that one syncs
+// to the developer's own Google Doc/Sheet and has zero surface anywhere in
+// this dashboard, for any role including 'owner' — this is a different,
+// ordinary in-app feature for the shop's own management to use.
 admin.get('/audit', async (c) => {
+  requireOwner(c);
   const limit = Math.min(Math.max(Number(new URL(c.req.url).searchParams.get('limit')) || 50, 1), 200);
   const { results } = await c.env.DB.prepare(
     'SELECT id, actor, action, entity, entity_id, detail, created_at FROM audit_log ORDER BY id DESC LIMIT ?',

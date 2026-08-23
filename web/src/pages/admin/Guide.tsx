@@ -742,9 +742,6 @@ const SECTIONS: Section[] = [
             ['Tax percentage', 'ট্যাক্স না নিলে 0 রাখুন।'],
           ]}
         />
-        <p>
-          পাশে <strong>Activity log</strong> আছে — কোন স্টাফ কখন কী বদলেছে তার পুরো তালিকা।
-        </p>
       </>
     ),
   },
