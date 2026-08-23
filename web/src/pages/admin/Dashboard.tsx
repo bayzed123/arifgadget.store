@@ -163,7 +163,20 @@ export function Dashboard() {
       </div>
 
       <div className="stat-row">
-        <Stat label="Stock on hand" value={number(inventory.stock_units)} foot={`${money(inventory.stock_cost_value)} at cost`} />
+        {/* The two money figures every stock check starts with: what's tied
+            up in it (cost) and what it's worth if sold (list price) — both
+            computed fresh from every active product's stock × price, never
+            typed in by hand. */}
+        <Stat
+          label="Total invested"
+          value={money(inventory.stock_cost_value)}
+          foot={`${number(inventory.stock_units)} units in stock, at cost`}
+        />
+        <Stat
+          label="Total catalogue value"
+          value={money(inventory.stock_retail_value)}
+          foot={`if every unit sells at list price`}
+        />
         <Stat
           label="Unrealised profit"
           value={money(inventory.unrealised_profit)}

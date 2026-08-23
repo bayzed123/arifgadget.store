@@ -747,6 +747,60 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .admin-main { padding: 24px 22px 60px; min-width: 0; }
 .admin-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
 
+/* ============================================================ admin mobile topbar + drawer */
+
+/*
+ * Under 900px the sidebar (12+ links) is hidden entirely — see .sidebar's
+ * own max-width:899px rule below — and this compact bar takes over: a
+ * hamburger that opens the same nav as a slide-in drawer, the logo, and the
+ * notification bell, all reachable without scrolling past a wall of links
+ * first.
+ */
+.admin-topbar { display: none; }
+@media (max-width: 899px) {
+  .admin-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--navy);
+    box-shadow: var(--shadow-sm);
+  }
+  .admin-topbar-logo svg { height: 30px; width: auto; }
+  .admin-topbar-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 1.15rem;
+    cursor: pointer;
+  }
+  .admin-topbar-btn:hover { background: rgba(255, 255, 255, 0.14); }
+
+  .sidebar { display: none; }
+}
+/* The drawer itself reuses .drawer-root/.drawer/.drawer-list from the
+   storefront's mobile menu (see MenuDrawer.tsx) — same premium slide-in
+   treatment, just fed the admin nav instead of shop categories. */
+.admin-menu-drawer .drawer-list button {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 /* ============================================================ stat tiles */
 
 .stat-row {
