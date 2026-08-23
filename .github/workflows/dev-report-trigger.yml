@@ -33,6 +33,16 @@ jobs:
             exit 1
           fi
 
+          # Repository variables pasted through GitHub's web UI routinely pick
+          # up a trailing \r\n or stray spaces (copy-paste from a phone browser
+          # is especially prone to it) — silently breaks the URL below with
+          # "Malformed input to a URL function" otherwise, for a reason nobody
+          # can see just by looking at the value in Settings. Strip it here
+          # rather than trusting every value to already be clean.
+          API_DOMAIN="$(printf '%s' "$API_DOMAIN" | tr -d '\r\n' | xargs)"
+          API_BASE_URL="$(printf '%s' "$API_BASE_URL" | tr -d '\r\n' | xargs)"
+          WORKERS_SUBDOMAIN="$(printf '%s' "$WORKERS_SUBDOMAIN" | tr -d '\r\n' | xargs)"
+
           # Same precedence as the deploy's own API URL resolution
           # (scripts/bootstrap-cf.mjs), minus the Cloudflare zone check —
           # unnecessary here since a working deploy already proves it.
