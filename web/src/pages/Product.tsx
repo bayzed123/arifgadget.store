@@ -205,20 +205,11 @@ export function Product() {
             category={product.category?.slug}
           />
 
-          {product.description && (
-            <section style={{ marginTop: 26 }}>
-              <h2 style={{ marginBottom: 10 }}>About this product</h2>
-              {/*
-                Was a single <p>, so a description written with blank lines and
-                bullet points collapsed into one wall of text. Prose is the same
-                renderer the policy pages use — it builds React elements rather
-                than setting innerHTML, so a stray tag typed into the dashboard
-                stays text instead of becoming markup.
-              */}
-              <Prose body={product.description} />
-            </section>
-          )}
-
+          {/*
+            Specifications first, then the description — a shopper scanning a
+            product wants the hard facts (model, capacity, battery life...)
+            before a paragraph of prose about it.
+          */}
           {specs.length > 0 && (
             <section style={{ marginTop: 26 }}>
               <h2 style={{ marginBottom: 10 }}>Specifications</h2>
@@ -230,6 +221,20 @@ export function Product() {
                   </div>
                 ))}
               </div>
+            </section>
+          )}
+
+          {product.description && (
+            <section style={{ marginTop: 26 }}>
+              <h2 style={{ marginBottom: 10 }}>About this product</h2>
+              {/*
+                Was a single <p>, so a description written with blank lines and
+                bullet points collapsed into one wall of text. Prose is the same
+                renderer the policy pages use — it builds React elements rather
+                than setting innerHTML, so a stray tag typed into the dashboard
+                stays text instead of becoming markup.
+              */}
+              <Prose body={product.description} />
             </section>
           )}
 
