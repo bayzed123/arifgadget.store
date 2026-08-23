@@ -136,3 +136,18 @@ if (devReportTriggerToken) {
 } else {
   console.log('DEV_REPORT_TRIGGER_TOKEN not provided — the GitHub Actions manual trigger will not work yet.');
 }
+
+/**
+ * Resend API key for the new-order alert email (worker/src/lib/email.ts).
+ * Same "absent is fine" rule as everything else here: without it, checkout
+ * just doesn't send an email — nothing about placing an order depends on it.
+ */
+const resendApiKey = process.env.RESEND_API_KEY?.trim();
+if (resendApiKey) {
+  await put('RESEND_API_KEY', resendApiKey);
+  console.log('RESEND_API_KEY set from the repository secret.');
+} else if (names.has('RESEND_API_KEY')) {
+  console.log('RESEND_API_KEY already present on the Worker — left unchanged.');
+} else {
+  console.log('RESEND_API_KEY not provided — new-order alert emails will not be sent.');
+}
