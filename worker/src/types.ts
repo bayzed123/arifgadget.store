@@ -62,6 +62,23 @@ export interface Env {
    * without already holding the real token.
    */
   DEV_REPORT_TRIGGER_TOKEN?: string;
+  /**
+   * Resend API key for order-alert emails — an "an order just came in" email
+   * to whoever runs the shop, separate from the weekly developer report (that
+   * one goes to the developer's own Doc/Sheet, this goes to the owner's
+   * inbox). Optional: without a key, or without ORDER_ALERT_EMAIL below, no
+   * email is sent and checkout is completely unaffected either way.
+   */
+  RESEND_API_KEY?: string;
+  /** Where the new-order alert email goes. Unset disables the alert entirely. */
+  ORDER_ALERT_EMAIL?: string;
+  /**
+   * Sender address for alert emails. Defaults to Resend's shared sandbox
+   * sender (onboarding@resend.dev) in email.ts if unset — fine for an
+   * internal alert-to-self, no domain verification required. Set this once a
+   * domain is verified in the Resend account for a branded from-address.
+   */
+  ALERT_EMAIL_FROM?: string;
 }
 
 export interface AdminClaims {

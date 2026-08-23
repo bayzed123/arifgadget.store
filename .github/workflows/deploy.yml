@@ -97,6 +97,9 @@ jobs:
           # Actions trigger. Optional: unset just means that trigger button
           # 404s and the report still runs on its Monday cron / Run now.
           DEV_REPORT_TRIGGER_TOKEN: ${{ secrets.DEV_REPORT_TRIGGER_TOKEN }}
+          # Sends the new-order alert email (worker/src/lib/email.ts).
+          # Optional: unset just means no email goes out on checkout.
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: node scripts/provision-secrets.mjs
 
       - name: Provision the dashboard owner

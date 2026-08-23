@@ -8,6 +8,7 @@ import { digitsSql, normalisePhone, phoneVariants } from '../lib/phone';
 import { courierConfigured } from '../lib/steadfast';
 import { syncOrderFromCourier, type CourierOrderRow } from '../lib/courierSync';
 import { isFinal } from '../lib/checkpoints';
+import { sendNewOrderAlert } from '../lib/email';
 
 interface IncomingItem {
   product_id: number;
@@ -225,7 +226,20 @@ orders.post('/orders', async (c) => {
        FROM orders WHERE order_no = ?`,
   )
     .bind(orderNo)
-    .first();
+    .first<{ total: number }>();
+
+  // Best-effort, off the request's critical path — a slow or failing email
+  // provider must never delay or break checkout itself. No-ops cleanly when
+  // RESEND_API_KEY/ORDER_ALERT_EMAIL aren't set.
+  c.executionCtx.waitUntil(
+    sendNewOrderAlert(c.env, {
+      order_no: orderNo,
+      customer_name,
+      customer_phone,
+      total: created!.total,
+      item_count: totals.lines.length,
+    }).catch(() => undefined),
+  );
 
   return c.json({ order: created, items: publicTotals(totals, byId).lines }, 201);
 });

@@ -42,6 +42,10 @@ id = "00000000000000000000000000000000"
 
 [vars]
 STORE_NAME = "Arif Gadgets"
+# Where the new-order alert email goes (see worker/src/lib/email.ts). Not a
+# secret — just an inbox address — so it lives here rather than as a Worker
+# secret. Empty disables the alert; the rest of checkout is unaffected.
+ORDER_ALERT_EMAIL = "gadget02030@gmail.com"
 # Browser origins allowed to call the API, comma separated.
 #
 # Left empty the API reflects whatever origin asks, which is the right default
@@ -53,4 +57,5 @@ STORE_NAME = "Arif Gadgets"
 ALLOWED_ORIGINS = ""
 
 # Secrets (set with `wrangler secret put`, or via the deploy workflow):
-#   JWT_SECRET  — signing key for admin sessions
+#   JWT_SECRET      — signing key for admin sessions
+#   RESEND_API_KEY  — sends the new-order alert email; absent means no email is sent
