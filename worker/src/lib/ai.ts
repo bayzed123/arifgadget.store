@@ -151,8 +151,15 @@ async function callWorkersAi(
     return { ok: false, error: `Workers AI request failed: ${err instanceof Error ? err.message : String(err)}` };
   }
 
-  const text = typeof raw === 'string' ? raw : (raw as { response?: string } | undefined)?.response;
-  if (!text || !text.trim()) {
+  // In JSON-schema mode Workers AI hands back `response` already parsed as
+  // an object, not as a JSON string the way a plain chat reply comes back —
+  // re-stringify it so every caller (parseReport() in devReport.ts
+  // especially) can keep doing its own JSON.parse regardless of which mode
+  // produced the reply.
+  const responseField = typeof raw === 'string' ? raw : (raw as { response?: unknown } | undefined)?.response;
+  const text =
+    typeof responseField === 'string' ? responseField : responseField && typeof responseField === 'object' ? JSON.stringify(responseField) : '';
+  if (!text.trim()) {
     return { ok: false, error: 'Workers AI returned an empty reply.' };
   }
 
