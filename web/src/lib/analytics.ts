@@ -23,6 +23,7 @@ declare global {
   interface Window {
     dataLayer?: unknown[];
     gtag?: (...args: GtagArgs) => void;
+    fbq?: (...args: unknown[]) => void;
   }
 }
 
@@ -39,14 +40,37 @@ function measurable(): boolean {
   // Staff working in the dashboard are not shoppers.
   if (pathname.startsWith('/admin')) return false;
 
-  return typeof window.gtag === 'function';
+  return typeof window.gtag === 'function' || typeof window.fbq === 'function';
 }
 
 /** Fire-and-forget. Analytics must never break a checkout. */
 function send(event: string, params: Record<string, unknown> = {}): void {
   if (!measurable()) return;
   try {
-    window.gtag?.('event', event, params);
+    const { event_id, ...eventParams } = params;
+    window.gtag?.('event', event, eventParams);
+    const metaNames: Record<string, string> = {
+      page_view: 'PageView',
+      view_item: 'ViewContent',
+      view_item_list: 'ViewContent',
+      select_item: 'ViewContent',
+      search: 'Search',
+      add_to_cart: 'AddToCart',
+      remove_from_cart: 'RemoveFromCart',
+      view_cart: 'ViewCart',
+      begin_checkout: 'InitiateCheckout',
+      add_shipping_info: 'AddShippingInfo',
+      add_payment_info: 'AddPaymentInfo',
+      purchase: 'Purchase',
+      sign_up: 'CompleteRegistration',
+      login: 'Login',
+      contact: 'Contact',
+      select_promotion: 'ViewContent',
+    };
+    const metaEvent = metaNames[event] ?? event;
+    const metaArgs: unknown[] = ['track', metaEvent, eventParams];
+    if (event_id) metaArgs.push({ eventID: event_id });
+    window.fbq?.(...metaArgs);
   } catch {
     /* a blocked or failed tracker is not the shopper's problem */
   }
@@ -180,6 +204,7 @@ export function trackPurchase(args: {
   zone?: string;
 }): void {
   send('purchase', {
+    event_id: args.orderNo,
     transaction_id: args.orderNo,
     currency: CURRENCY,
     value: taka(args.value),

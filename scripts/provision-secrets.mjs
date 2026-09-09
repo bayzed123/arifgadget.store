@@ -144,3 +144,24 @@ if (resendApiKey) {
 } else {
   console.log('RESEND_API_KEY not provided — new-order alert emails will not be sent.');
 }
+
+/**
+ * Meta browser/server tracking. The Pixel ID is public in the storefront,
+ * while META-CAPI is only read by the Worker. Empty repository values leave
+ * existing Cloudflare secrets untouched.
+ */
+const META_SECRETS = {
+  'DATA-META-PIXEL-ID': process.env.DATA_META_PIXEL_ID,
+  'META-CAPI': process.env.META_CAPI,
+};
+for (const [name, raw] of Object.entries(META_SECRETS)) {
+  const value = raw?.trim();
+  if (value) {
+    await put(name, value);
+    console.log(`${name} set from the repository secret.`);
+  } else if (names.has(name)) {
+    console.log(`${name} already present on the Worker — left unchanged.`);
+  } else {
+    console.log(`${name} not provided — Meta server-side tracking is not configured yet.`);
+  }
+}

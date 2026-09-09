@@ -98,6 +98,11 @@ jobs:
           # Sends the new-order alert email (worker/src/lib/email.ts).
           # Optional: unset just means no email goes out on checkout.
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          # Meta Pixel ID is safe to expose in browser code, but the CAPI token
+          # must remain a Worker secret. Both names mirror the existing Worker
+          # secret bindings supplied by the owner.
+          DATA_META_PIXEL_ID: ${{ secrets.DATA_META_PIXEL_ID }}
+          META_CAPI: ${{ secrets.META_CAPI }}
         run: node scripts/provision-secrets.mjs
 
       - name: Provision the dashboard owner

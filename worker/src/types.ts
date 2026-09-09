@@ -69,6 +69,11 @@ export interface Env {
    * email is sent and checkout is completely unaffected either way.
    */
   RESEND_API_KEY?: string;
+  /** Meta Pixel is public-facing; the CAPI token remains server-only. */
+  'DATA-META-PIXEL-ID'?: string;
+  'META-CAPI'?: string;
+  META_PIXEL_ID?: string;
+  META_CAPI_TOKEN?: string;
   /** Where the new-order alert email goes. Unset disables the alert entirely. */
   ORDER_ALERT_EMAIL?: string;
   /**

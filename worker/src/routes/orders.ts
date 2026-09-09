@@ -9,6 +9,7 @@ import { courierConfigured } from '../lib/steadfast';
 import { syncOrderFromCourier, type CourierOrderRow } from '../lib/courierSync';
 import { isFinal } from '../lib/checkpoints';
 import { sendNewOrderAlert } from '../lib/email';
+import { sendMetaPurchase } from '../lib/meta';
 
 interface IncomingItem {
   product_id: number;
@@ -239,6 +240,20 @@ orders.post('/orders', async (c) => {
       total: created!.total,
       item_count: totals.lines.length,
     }).catch(() => undefined),
+  );
+  c.executionCtx.waitUntil(
+    sendMetaPurchase(c.env, {
+      orderNo,
+      total: created!.total,
+      items: totals.lines.map((line) => ({
+        product_id: line.product_id,
+        qty: line.qty,
+        unit_price: line.unit_price,
+      })),
+      email: customer_email,
+      phone: customer_phone,
+      request: c.req.raw,
+    }),
   );
 
   return c.json({ order: created, items: publicTotals(totals, byId).lines }, 201);
