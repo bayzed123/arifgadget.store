@@ -4,6 +4,16 @@ const GRAPH_VERSION = 'v20.0';
 const PIXEL_ID_KEYS = ['DATA-META-PIXEL-ID', 'META_PIXEL_ID'] as const;
 const TOKEN_KEYS = ['META-CAPI', 'META_CAPI_TOKEN'] as const;
 
+export type MetaServerEventInput = {
+  eventName: 'AddToCart' | 'InitiateCheckout' | 'Purchase';
+  eventId: string;
+  request: Request;
+  sourceUrl?: string;
+  email?: string;
+  phone?: string;
+  customData: Record<string, unknown>;
+};
+
 type MetaEvent = {
   event_name: string;
   event_time: number;
@@ -33,21 +43,8 @@ function normalisePhone(phone: string): string {
   return digits.startsWith('880') ? digits : digits.startsWith('0') ? `88${digits}` : digits;
 }
 
-export interface MetaOrderInput {
-  orderNo: string;
-  total: number;
-  items: Array<{ product_id: number; qty: number; unit_price: number }>;
-  email?: string;
-  phone?: string;
-  request: Request;
-}
-
-/**
- * Sends a Purchase event after the order is committed. This is deliberately
- * best-effort: Meta outages must never turn a successful checkout into an
- * error, and no access token is ever returned to the browser or logged.
- */
-export async function sendMetaPurchase(env: Env, input: MetaOrderInput): Promise<void> {
+/** Best-effort server event delivery; never blocks or fails a storefront action. */
+export async function sendMetaEvent(env: Env, input: MetaServerEventInput): Promise<void> {
   const pixelId = secret(env, PIXEL_ID_KEYS);
   const accessToken = secret(env, TOKEN_KEYS);
   if (!pixelId || !accessToken) return;
@@ -61,15 +58,45 @@ export async function sendMetaPurchase(env: Env, input: MetaOrderInput): Promise
     ...(input.request.headers.get('user-agent') ? { client_user_agent: input.request.headers.get('user-agent')! } : {}),
   };
 
-  const origin = new URL(input.request.url).origin;
   const event: MetaEvent = {
-    event_name: 'Purchase',
+    event_name: input.eventName,
     event_time: Math.floor(Date.now() / 1000),
-    event_id: input.orderNo,
+    event_id: input.eventId,
     action_source: 'website',
-    event_source_url: `${origin}/checkout`,
+    event_source_url: input.sourceUrl ?? new URL(input.request.url).origin,
     user_data: userData,
-    custom_data: {
+    custom_data: input.customData,
+  };
+
+  try {
+    await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(pixelId)}/events?access_token=${encodeURIComponent(accessToken)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: [event] }),
+    });
+  } catch {
+    // Analytics is non-critical and must not affect storefront actions.
+  }
+}
+
+export interface MetaOrderInput {
+  orderNo: string;
+  total: number;
+  items: Array<{ product_id: number; qty: number; unit_price: number }>;
+  email?: string;
+  phone?: string;
+  request: Request;
+}
+
+export async function sendMetaPurchase(env: Env, input: MetaOrderInput): Promise<void> {
+  await sendMetaEvent(env, {
+    eventName: 'Purchase',
+    eventId: input.orderNo,
+    request: input.request,
+    sourceUrl: `${new URL(input.request.url).origin}/checkout`,
+    email: input.email,
+    phone: input.phone,
+    customData: {
       currency: 'BDT',
       value: Math.round(input.total) / 100,
       order_id: input.orderNo,
@@ -80,15 +107,5 @@ export async function sendMetaPurchase(env: Env, input: MetaOrderInput): Promise
         item_price: Math.round(item.unit_price) / 100,
       })),
     },
-  };
-
-  try {
-    await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(pixelId)}/events?access_token=${encodeURIComponent(accessToken)}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ data: [event] }),
-    });
-  } catch {
-    // Analytics is non-critical and must not affect order completion.
-  }
+  });
 }

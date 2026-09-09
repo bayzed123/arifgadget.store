@@ -43,11 +43,14 @@ function measurable(): boolean {
   return typeof window.gtag === 'function' || typeof window.fbq === 'function';
 }
 
+import { api } from './api';
+
 /** Fire-and-forget. Analytics must never break a checkout. */
 function send(event: string, params: Record<string, unknown> = {}): void {
   if (!measurable()) return;
   try {
-    const { event_id, ...eventParams } = params;
+    const { event_id: suppliedEventId, ...eventParams } = params;
+    const event_id = suppliedEventId ?? (event === 'add_to_cart' || event === 'begin_checkout' ? crypto.randomUUID() : undefined);
     window.gtag?.('event', event, eventParams);
     const metaNames: Record<string, string> = {
       page_view: 'PageView',
@@ -71,6 +74,30 @@ function send(event: string, params: Record<string, unknown> = {}): void {
     const metaArgs: unknown[] = ['track', metaEvent, eventParams];
     if (event_id) metaArgs.push({ eventID: event_id });
     window.fbq?.(...metaArgs);
+
+    // Meta's browser and server events share this ID for deduplication. The
+    // Worker supplies IP/user-agent data and reads the CAPI token privately.
+    if (event_id && (event === 'add_to_cart' || event === 'begin_checkout')) {
+      const items = Array.isArray(eventParams.items) ? eventParams.items : [];
+      void api('/api/meta/events', {
+        method: 'POST',
+        body: {
+          event_name: metaEvent,
+          event_id,
+          source_url: typeof window === 'undefined' ? undefined : window.location.href,
+          custom_data: {
+            currency: eventParams.currency,
+            value: eventParams.value,
+            content_type: 'product',
+            content_ids: items.map((item) => (item as { item_id?: string }).item_id).filter(Boolean),
+            contents: items.map((item) => {
+              const line = item as { item_id?: string; price?: number; quantity?: number };
+              return { id: line.item_id, quantity: line.quantity ?? 1, item_price: line.price };
+            }),
+          },
+        },
+      }).catch(() => undefined);
+    }
   } catch {
     /* a blocked or failed tracker is not the shopper's problem */
   }
