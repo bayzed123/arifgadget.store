@@ -1900,7 +1900,45 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 }
 .btn.whatsapp:hover { background: #1fbe5b; }
 
-.invoice-wrap { max-width: 860px; margin-inline: auto; }
+/*
+ * An invoice is a document a customer prints or saves as proof of purchase —
+ * not themed UI. It must always render in the same light, print-friendly
+ * colors no matter the shop's dark-mode setting or the visitor's OS/browser
+ * preference (this page never calls useTheme(), so on a device set to dark
+ * it was inheriting the dark palette with no way to switch it back — a dark
+ * navy background is exactly what nobody wants on a printed or PDF receipt).
+ * Re-declaring the light tokens here, scoped to this wrapper, overrides
+ * whatever :root[data-theme] or prefers-color-scheme set above it.
+ */
+.invoice-wrap {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #fbfcfd;
+  --surface-inset: #f5f7fa;
+  --ink: #0b1220;
+  --ink-2: #475569;
+  --ink-3: #7c8ba1;
+  --line: #e3e8ef;
+  --line-strong: #cbd5e1;
+  --brand: #ff7a18;
+  --brand-ink: #c2410c;
+  --brand-soft: #fff2e6;
+  --good: #0f7b52;
+  --warn: #a4620a;
+  --bad: #b4362f;
+  color-scheme: light;
+  /*
+   * Redefining the custom properties above only helps elements that
+   * reference var(--ink) etc. themselves; `color` is inherited as body's
+   * already-resolved value otherwise. Setting it here re-establishes the
+   * inheritance root so every descendant that doesn't set its own color
+   * (most of the invoice's text) picks up the light --ink too.
+   */
+  background: var(--bg);
+  color: var(--ink);
+  max-width: 860px;
+  margin-inline: auto;
+}
 .invoice-actions {
   display: flex;
   gap: 10px;
