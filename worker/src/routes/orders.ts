@@ -27,6 +27,7 @@ interface PricedProduct {
   cost_price: number;
   moq: number;
   stock: number;
+  free_delivery: number;
 }
 
 export const orders = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -54,7 +55,7 @@ function parseItems(raw: unknown): IncomingItem[] {
 async function priceCart(env: Env, items: IncomingItem[], zone: DeliveryZone = 'outside') {
   const placeholders = items.map(() => '?').join(',');
   const { results } = await env.DB.prepare(
-    `SELECT id, sku, name, image_url, price, cost_price, moq, stock
+    `SELECT id, sku, name, image_url, price, cost_price, moq, stock, free_delivery
        FROM products WHERE id IN (${placeholders}) AND status = 'active'`,
   )
     .bind(...items.map((i) => i.product_id))
@@ -78,6 +79,7 @@ async function priceCart(env: Env, items: IncomingItem[], zone: DeliveryZone = '
       cost_price: product.cost_price,
       moq: product.moq,
       tiers: tiers.get(product.id) ?? [],
+      free_delivery: product.free_delivery === 1,
     };
   });
 
@@ -101,6 +103,7 @@ function publicTotals(totals: CartTotals, byId: Map<number, PricedProduct>) {
         tier_savings: line.tier_savings,
         stock: product.stock,
         in_stock: product.stock >= line.qty,
+        free_delivery: line.free_delivery,
       };
     }),
     subtotal: totals.subtotal,
@@ -113,6 +116,7 @@ function publicTotals(totals: CartTotals, byId: Map<number, PricedProduct>) {
     delivery_zone: totals.delivery_zone,
     free_shipping_applied: totals.free_shipping_applied,
     free_shipping_gap: totals.free_shipping_gap,
+    free_delivery_applied: totals.free_delivery_applied,
   };
 }
 
@@ -135,6 +139,11 @@ orders.post('/orders', async (c) => {
   const customer_email = optionalString(body.customer_email, '', 160);
   const address = requireString(body.address, 'address', 400);
   const city = requireString(body.city, 'city', 80);
+  // Structured detail from the checkout's postcode/district/upazila picker —
+  // all optional, additive on top of the address/city fields above.
+  const upazila = optionalString(body.upazila, '', 80);
+  const union_name = optionalString(body.union_name, '', 80);
+  const postcode = optionalString(body.postcode, '', 10);
   const note = optionalString(body.note, '', 500);
   // bKash/Nagad/Rocket TrxID or a bank reference — the shopper's proof of payment.
   const payment_reference = optionalString(body.payment_reference, '', 80);
@@ -172,9 +181,10 @@ orders.post('/orders', async (c) => {
   const statements = [
     c.env.DB.prepare(
       `INSERT INTO orders (order_no, customer_name, customer_phone, customer_email, address, city,
+                           upazila, union_name, postcode,
                            note, payment_method, status, discount, shipping, tax, customer_id,
                            delivery_zone, payment_reference)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
     ).bind(
       orderNo,
       customer_name,
@@ -182,6 +192,9 @@ orders.post('/orders', async (c) => {
       customer_email,
       address,
       city,
+      upazila,
+      union_name,
+      postcode,
       note,
       payment_method,
       totals.discount,

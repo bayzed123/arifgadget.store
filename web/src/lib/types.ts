@@ -38,6 +38,8 @@ export interface Product {
   colours: string[];
   /** False for clearance and sealed lines the return policy does not cover. */
   returnable: boolean;
+  /** True waives delivery for the whole order whenever this product is in the cart. */
+  free_delivery: boolean;
   units_sold: number;
   tiers: Tier[];
   min_price: number;
@@ -102,6 +104,7 @@ export interface QuoteLine {
   tier_savings: number;
   stock: number;
   in_stock: boolean;
+  free_delivery: boolean;
 }
 
 /** Delivery is priced by zone; anything unknown falls back to the higher rate. */
@@ -119,6 +122,7 @@ export interface Quote {
   delivery_zone: DeliveryZone;
   free_shipping_applied: boolean;
   free_shipping_gap: number;
+  free_delivery_applied: boolean;
 }
 
 export interface AdminOrder {

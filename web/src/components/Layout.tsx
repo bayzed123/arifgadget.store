@@ -419,7 +419,13 @@ export function Layout() {
       {/* Hover any picture to see it enlarged; click one to open it full screen. */}
       <ImageZoom />
       <ChatLauncher number={settings?.whatsapp_number} storeName={settings?.store_name} />
-      <MenuDrawer open={menuOpen} categories={categories} onClose={() => setMenuOpen(false)} />
+      <MenuDrawer
+        open={menuOpen}
+        categories={categories}
+        onClose={() => setMenuOpen(false)}
+        theme={theme}
+        setTheme={setTheme}
+      />
       <BottomNav onOpenCategories={() => setMenuOpen(true)} />
     </>
   );

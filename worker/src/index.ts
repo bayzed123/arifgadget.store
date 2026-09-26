@@ -14,6 +14,7 @@ import { courierHook } from './routes/courierHook';
 import { reviews } from './routes/reviews';
 import { support } from './routes/support';
 import { metaEvents } from './routes/metaEvents';
+import { geo } from './routes/geo';
 import { runSheetsSync } from './lib/sheetsSync';
 import { runHealthCheck } from './lib/healthCheck';
 import { runDevReport } from './lib/devReport';
@@ -74,6 +75,7 @@ app.route('/api', content);
 app.route('/api', reviews);
 app.route('/api', metaEvents);
 app.route('/api/support', support);
+app.route('/api/geo', geo);
 app.route('/api/account', account);
 // Courier callbacks. Authenticated by a secret path segment, not a session,
 // because the caller is Steadfast rather than a person.

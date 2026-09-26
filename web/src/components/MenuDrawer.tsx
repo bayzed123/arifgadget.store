@@ -1,20 +1,32 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import type { Category } from '../lib/types';
+import type { Theme } from '../lib/store';
 
 /**
  * Slide-in category menu, opened from the hamburger. Closes on backdrop click,
  * Escape, or any navigation — a drawer left open behind a new page is the most
  * common bug in this pattern.
+ *
+ * The header's own theme toggle is CSS-hidden below 900px (see styles.css's
+ * .only-lg rule) with a comment saying it moves in here on phones — it never
+ * actually did, leaving phone visitors with no way to switch themes at all.
+ * theme/setTheme are passed down from Layout's single useTheme() rather than
+ * calling the hook again here, so the header button (on wider screens) and
+ * this drawer row can never disagree about the current theme.
  */
 export function MenuDrawer({
   open,
   categories,
   onClose,
+  theme,
+  setTheme,
 }: {
   open: boolean;
   categories: Category[];
   onClose: () => void;
+  theme: Theme;
+  setTheme: (next: Theme) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -89,6 +101,12 @@ export function MenuDrawer({
               ›
             </span>
           </Link>
+          <button type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            <span className="ic" aria-hidden="true">
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </span>
+            <span className="nm">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+          </button>
         </div>
       </nav>
     </div>

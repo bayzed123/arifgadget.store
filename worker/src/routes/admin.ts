@@ -533,8 +533,8 @@ admin.post('/products', async (c) => {
     `INSERT INTO products (sku, slug, name, brand, category_id, summary, description,
                            cost_price, price, compare_at_price, stock, low_stock_threshold, moq,
                            image_url, gallery, specs, tags, status, featured,
-                           colours, returnable)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
+                           colours, returnable, free_delivery)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
   )
     .bind(
       sku,
@@ -560,6 +560,7 @@ admin.post('/products', async (c) => {
       // Returnable unless staff say otherwise: most stock is, and the safer
       // default for a shopper is the one that grants them the policy.
       body.returnable === false ? 0 : 1,
+      body.free_delivery ? 1 : 0,
     )
     .first<{ id: number }>();
 
@@ -620,6 +621,10 @@ admin.patch('/products/:id', async (c) => {
   if (body.returnable !== undefined) {
     sets.push('returnable = ?');
     binds.push(body.returnable ? 1 : 0);
+  }
+  if (body.free_delivery !== undefined) {
+    sets.push('free_delivery = ?');
+    binds.push(body.free_delivery ? 1 : 0);
   }
   if (body.category_id !== undefined || body.category_name !== undefined) {
     sets.push('category_id = ?');
