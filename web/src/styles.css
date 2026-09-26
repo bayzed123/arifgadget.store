@@ -792,7 +792,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 /* The drawer itself reuses .drawer-root/.drawer/.drawer-list from the
    storefront's mobile menu (see MenuDrawer.tsx) — same premium slide-in
    treatment, just fed the admin nav instead of shop categories. */
-.admin-menu-drawer .drawer-list button {
+.drawer-list button {
   width: 100%;
   border: 0;
   background: none;
@@ -1475,7 +1475,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 
 .drawer-list { display: flex; flex-direction: column; }
 .drawer-list.secondary { border-top: 8px solid var(--surface-inset); }
-.drawer-list a {
+.drawer-list a,
+.drawer-list button {
   display: flex;
   align-items: center;
   gap: 13px;
@@ -1484,7 +1485,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   font-weight: 600;
   font-size: 0.95rem;
 }
-.drawer-list a:hover { background: var(--surface-inset); }
+.drawer-list a:hover,
+.drawer-list button:hover { background: var(--surface-inset); }
 .drawer-list a.accent { color: var(--brand-ink); font-weight: 800; }
 .drawer-list .ic { font-size: 1.15rem; width: 24px; text-align: center; }
 .drawer-list .nm { flex: 1; }

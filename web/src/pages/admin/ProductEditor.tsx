@@ -35,6 +35,7 @@ const BLANK = {
   category_name: '',
   colours: '',
   returnable: true,
+  free_delivery: false,
 };
 
 export function ProductEditor({ product, categories, onClose, onSaved }: Props) {
@@ -76,6 +77,7 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
       category_name: '',
       colours: (product.colours ?? []).join(', '),
       returnable: product.returnable !== false,
+      free_delivery: product.free_delivery === true,
     });
     setTiers(product.tiers);
     setSpecs(Object.entries(product.specs));
@@ -139,6 +141,7 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
       ...(form.category_name.trim() ? { category_name: form.category_name.trim() } : {}),
       colours: form.colours,
       returnable: form.returnable,
+      free_delivery: form.free_delivery,
       tiers: tiers.filter((t) => t.min_qty > 0 && t.unit_price >= 0),
       specs: Object.fromEntries(specs.filter(([k]) => k.trim())),
     };
@@ -553,6 +556,19 @@ export function ProductEditor({ product, categories, onClose, onSaved }: Props) 
                     <input type="checkbox" checked={form.featured} onChange={(e) => set('featured', e.target.checked)} />
                     Feature on the homepage
                   </label>
+                  <label className="row gap-8 small" style={{ fontWeight: 600, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={form.free_delivery}
+                      onChange={(e) => set('free_delivery', e.target.checked)}
+                    />
+                    Free delivery on this product
+                  </label>
+                  <span className="hint">
+                    {form.free_delivery
+                      ? 'Waives the delivery charge on the whole order whenever this product is in the cart.'
+                      : 'Delivery is charged normally (or waived by the cart-total threshold in Settings, as usual).'}
+                  </span>
                   {/*
                     Ticked by default, because most stock is returnable and the
                     safer default for a shopper is the one that grants them the

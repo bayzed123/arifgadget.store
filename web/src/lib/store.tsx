@@ -451,7 +451,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 /* ============================================================ theme */
 
-type Theme = 'light' | 'dark' | 'system';
+export type Theme = 'light' | 'dark' | 'system';
 const THEME_KEY = 'ag.theme';
 
 export function useTheme(): [Theme, (next: Theme) => void] {

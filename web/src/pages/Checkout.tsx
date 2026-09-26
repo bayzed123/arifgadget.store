@@ -32,6 +32,25 @@ const PAYMENTS = [
 /** Which methods need the shop's number and a transaction ID back. */
 const MOBILE_BANKING = ['bkash', 'nagad', 'rocket'];
 
+interface District {
+  id: number;
+  division_id: number;
+  name: string;
+  bn_name: string;
+}
+interface Upazila {
+  id: number;
+  district_id: number;
+  name: string;
+  bn_name: string;
+}
+interface PostcodeLookup {
+  found: boolean;
+  district_id?: number | null;
+  upazila_id?: number | null;
+  thana_name?: string;
+}
+
 interface Placed {
   order_no: string;
   total: number;
@@ -100,6 +119,8 @@ export function Checkout() {
     customer_email: '',
     address: '',
     city: '',
+    postcode: '',
+    union_name: '',
     note: '',
     payment_method: 'cod',
     payment_reference: '',
@@ -118,6 +139,91 @@ export function Checkout() {
       city: prev.city || customer.city || '',
     }));
   }, [customer]);
+
+  /**
+   * District/upazila picker, backed by /api/geo (see worker/src/routes/geo.ts
+   * and migration 0023) — replaces free-typing a city name with picking the
+   * real district, and lets a postcode auto-fill both plus the delivery zone.
+   * All 64 districts load once; upazilas are fetched per district since the
+   * full list is a few hundred rows. Upazila stays optional — a handful of
+   * urban thana names (inside Dhaka city itself) aren't in this rural-focused
+   * upazila list, so the free-text "Area / Union" field below covers those.
+   */
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [upazilas, setUpazilas] = useState<Upazila[]>([]);
+  const [districtId, setDistrictId] = useState<number | null>(null);
+  const [upazilaId, setUpazilaId] = useState<number | null>(null);
+  const [pendingUpazilaName, setPendingUpazilaName] = useState('');
+  const [lookingUpPostcode, setLookingUpPostcode] = useState(false);
+
+  useEffect(() => {
+    api<{ districts: District[] }>('/api/geo/districts')
+      .then((res) => setDistricts(res.districts))
+      .catch(() => setDistricts([]));
+  }, []);
+
+  // A returning customer's saved city (free text from before this picker
+  // existed, or from a previous order) shouldn't force them to re-pick their
+  // district by hand if it already names one we know.
+  useEffect(() => {
+    if (districtId || districts.length === 0) return;
+    const known = customer?.city || form.city;
+    if (!known) return;
+    const match = districts.find((d) => d.name.toLowerCase() === known.trim().toLowerCase());
+    if (match) setDistrictId(match.id);
+    // Only re-check when the district list itself finishes loading or the
+    // customer changes — not on every form.city edit the user types below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [districts, customer]);
+
+  useEffect(() => {
+    if (!districtId) {
+      setUpazilas([]);
+      return;
+    }
+    api<{ upazilas: Upazila[] }>(`/api/geo/upazilas?district_id=${districtId}`)
+      .then((res) => {
+        setUpazilas(res.upazilas);
+        if (pendingUpazilaName) {
+          const match = res.upazilas.find((u) => u.name.toLowerCase() === pendingUpazilaName.toLowerCase());
+          if (match) setUpazilaId(match.id);
+          setPendingUpazilaName('');
+        }
+      })
+      .catch(() => setUpazilas([]));
+    // pendingUpazilaName is consumed once per fetch, not a dependency to re-run on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [districtId]);
+
+  // The district IS the city for delivery purposes; picking one both fills
+  // the (still required) city field and picks a sensible zone default —
+  // the manual Inside/Outside Dhaka choice below still overrides this.
+  useEffect(() => {
+    const district = districts.find((d) => d.id === districtId);
+    if (!district) return;
+    set('city', district.name);
+    setZone(district.name.trim().toLowerCase() === 'dhaka' ? 'dhaka' : 'outside');
+    // set/setZone are stable setters; only the resolved district should re-run this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [districtId, districts]);
+
+  async function lookupPostcode(code: string) {
+    const trimmed = code.trim();
+    if (!/^\d{4}$/.test(trimmed)) return;
+    setLookingUpPostcode(true);
+    try {
+      const res = await api<PostcodeLookup>(`/api/geo/postcode/${trimmed}`);
+      if (res.found && res.district_id) {
+        setPendingUpazilaName(res.thana_name ?? '');
+        setDistrictId(res.district_id);
+        if (res.upazila_id) setUpazilaId(res.upazila_id);
+      }
+    } catch {
+      /* a postcode that doesn't resolve just means no auto-fill — nothing to show the shopper */
+    } finally {
+      setLookingUpPostcode(false);
+    }
+  }
 
   const [error, setError] = useState('');
   const [placed, setPlaced] = useState<Placed | null>(null);
@@ -165,6 +271,7 @@ export function Checkout() {
         customerAuth: true,
         body: {
           ...form,
+          upazila: upazilas.find((u) => u.id === upazilaId)?.name ?? '',
           delivery_zone: zone,
           items: lineItems.map((i) => ({ product_id: i.product_id, qty: i.qty })),
         },
@@ -368,17 +475,79 @@ export function Checkout() {
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="city">City / district *</label>
+                  <label htmlFor="postcode">Postcode (optional)</label>
                   <input
-                    id="city"
+                    id="postcode"
+                    className="input"
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="e.g. 1206"
+                    value={form.postcode}
+                    onChange={(e) => set('postcode', e.target.value.replace(/\D/g, ''))}
+                    onBlur={(e) => lookupPostcode(e.target.value)}
+                    autoComplete="postal-code"
+                  />
+                  <span className="hint">
+                    {lookingUpPostcode ? 'Looking up…' : 'Fills in the district and upazila below, if we recognise it.'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="form-grid">
+                <div className="field">
+                  <label htmlFor="district">District / Zila *</label>
+                  <select
+                    id="district"
                     className="input"
                     required
-                    maxLength={80}
-                    value={form.city}
-                    onChange={(e) => set('city', e.target.value)}
-                    autoComplete="address-level2"
-                  />
+                    value={districtId ?? ''}
+                    onChange={(e) => {
+                      setUpazilaId(null);
+                      setDistrictId(e.target.value ? Number(e.target.value) : null);
+                    }}
+                  >
+                    <option value="" disabled>
+                      Select a district…
+                    </option>
+                    {districts.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} — {d.bn_name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+                <div className="field">
+                  <label htmlFor="upazila">Upazila / Thana (optional)</label>
+                  <select
+                    id="upazila"
+                    className="input"
+                    disabled={!districtId}
+                    value={upazilaId ?? ''}
+                    onChange={(e) => setUpazilaId(e.target.value ? Number(e.target.value) : null)}
+                  >
+                    <option value="">
+                      {districtId ? 'Select an upazila (optional)…' : 'Pick a district first'}
+                    </option>
+                    {upazilas.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} — {u.bn_name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="hint">Not listed (e.g. an area inside Dhaka city)? Name it below instead.</span>
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="union">Area / Union / Ward (optional)</label>
+                <input
+                  id="union"
+                  className="input"
+                  maxLength={80}
+                  placeholder="e.g. Mirpur, or your union's name"
+                  value={form.union_name}
+                  onChange={(e) => set('union_name', e.target.value)}
+                />
               </div>
 
               <div className="field">
@@ -445,10 +614,16 @@ export function Checkout() {
                   </label>
                 ))}
               </div>
-              {quote?.free_shipping_applied && (
+              {quote?.free_delivery_applied ? (
                 <p className="tiny" style={{ color: 'var(--good)', fontWeight: 700, marginTop: 10 }}>
-                  This order is over the free-delivery threshold, so there is no charge either way.
+                  🎁 A product in your order has free delivery, so there is no charge either way.
                 </p>
+              ) : (
+                quote?.free_shipping_applied && (
+                  <p className="tiny" style={{ color: 'var(--good)', fontWeight: 700, marginTop: 10 }}>
+                    This order is over the free-delivery threshold, so there is no charge either way.
+                  </p>
+                )
               )}
             </div>
           </div>

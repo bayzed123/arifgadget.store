@@ -89,14 +89,24 @@ export function OrderSummary({ quote, loading }: { quote: Quote | null; loading:
       <div className="summary-row">
         <span className="muted">
           Delivery
-          {!quote.free_shipping_applied && (
+          {!quote.free_shipping_applied && !quote.free_delivery_applied && (
             <span className="tiny dim"> · {quote.delivery_zone === 'dhaka' ? 'inside Dhaka' : 'outside Dhaka'}</span>
           )}
         </span>
         <span className="v">
-          {quote.free_shipping_applied ? <span style={{ color: 'var(--good)' }}>Free</span> : money(quote.shipping)}
+          {quote.free_shipping_applied || quote.free_delivery_applied ? (
+            <span style={{ color: 'var(--good)' }}>Free</span>
+          ) : (
+            money(quote.shipping)
+          )}
         </span>
       </div>
+
+      {quote.free_delivery_applied && (
+        <p className="tiny" style={{ color: 'var(--good)', fontWeight: 700, marginTop: -4, marginBottom: 8 }}>
+          🎁 Free delivery — one of the products in your cart qualifies.
+        </p>
+      )}
 
       {quote.tax > 0 && (
         <div className="summary-row">
@@ -110,7 +120,7 @@ export function OrderSummary({ quote, loading }: { quote: Quote | null; loading:
         <span className="v">{money(quote.total)}</span>
       </div>
 
-      {!quote.free_shipping_applied && quote.free_shipping_gap > 0 && (
+      {!quote.free_shipping_applied && !quote.free_delivery_applied && quote.free_shipping_gap > 0 && (
         <div style={{ marginTop: 14 }}>
           <p className="tiny muted" style={{ marginBottom: 6 }}>
             Add <strong>{money(quote.free_shipping_gap)}</strong> more for free delivery

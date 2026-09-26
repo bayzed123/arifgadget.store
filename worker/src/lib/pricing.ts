@@ -64,6 +64,8 @@ export interface CartLineInput {
   cost_price: number;
   moq: number;
   tiers: PriceTier[];
+  /** Admin-set per-product override — see migration 0024. */
+  free_delivery: boolean;
 }
 
 export interface CartLine {
@@ -76,6 +78,7 @@ export interface CartLine {
   line_profit: number;
   /** How much the volume tier saved against the base price. */
   tier_savings: number;
+  free_delivery: boolean;
 }
 
 export interface CartTotals {
@@ -94,6 +97,13 @@ export interface CartTotals {
   free_shipping_applied: boolean;
   /** Minor units still needed to unlock free shipping, 0 once unlocked. */
   free_shipping_gap: number;
+  /**
+   * True when at least one line is a free-delivery product. One physical
+   * parcel can't charge shipping for part of its contents and not the rest,
+   * so any qualifying line waives shipping for the whole order — the same
+   * whole-order-or-nothing shape free_shipping_applied already has.
+   */
+  free_delivery_applied: boolean;
 }
 
 export function computeCart(
@@ -114,6 +124,7 @@ export function computeCart(
       line_cost: qty * input.cost_price,
       line_profit: qty * (unit_price - input.cost_price),
       tier_savings: qty * (input.base_price - unit_price),
+      free_delivery: input.free_delivery,
     };
   });
 
@@ -131,7 +142,8 @@ export function computeCart(
   // like, and cost real money before it was caught.
   const free_shipping_applied =
     settings.free_shipping_over > 0 && net >= settings.free_shipping_over && net > 0;
-  const shipping = net === 0 || free_shipping_applied ? 0 : shippingRate(settings, zone);
+  const free_delivery_applied = lines.some((l) => l.free_delivery);
+  const shipping = net === 0 || free_shipping_applied || free_delivery_applied ? 0 : shippingRate(settings, zone);
   const tax = Math.round((net * settings.tax_pct) / 100);
   const total = net + shipping + tax;
   const profit = net - cost_total;
@@ -154,6 +166,7 @@ export function computeCart(
       free_shipping_applied || settings.free_shipping_over <= 0
         ? 0
         : Math.max(settings.free_shipping_over - net, 0),
+    free_delivery_applied,
   };
 }
 
