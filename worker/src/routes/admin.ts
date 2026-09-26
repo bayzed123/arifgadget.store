@@ -825,7 +825,16 @@ admin.get('/orders', async (c) => {
             o.margin_pct, o.payment_method, o.payment_reference, o.delivery_zone, o.created_at,
             o.courier, o.consignment_id, o.tracking_code, o.courier_status,
             o.courier_cod_amount, o.courier_synced_at,
-            (SELECT COALESCE(SUM(qty),0) FROM order_items WHERE order_id = o.id) AS units
+            (SELECT COALESCE(SUM(qty),0) FROM order_items WHERE order_id = o.id) AS units,
+            CASE WHEN o.customer_phone = '' THEN 0
+                 ELSE (SELECT COUNT(*) FROM orders WHERE customer_phone = o.customer_phone) END
+              AS customer_total_orders,
+            CASE WHEN o.customer_phone = '' THEN 0
+                 ELSE (SELECT COUNT(*) FROM orders WHERE customer_phone = o.customer_phone AND status = 'delivered') END
+              AS customer_delivered_orders,
+            CASE WHEN o.customer_phone = '' THEN 0
+                 ELSE (SELECT COUNT(*) FROM orders WHERE customer_phone = o.customer_phone AND status IN ('cancelled', 'refunded')) END
+              AS customer_lost_orders
        FROM orders o WHERE ${whereSql}
       ORDER BY ${rankSql}o.created_at DESC LIMIT ? OFFSET ?`,
   )
@@ -838,7 +847,7 @@ admin.get('/orders', async (c) => {
 
 admin.get('/orders/:id', async (c) => {
   const id = Number(c.req.param('id'));
-  const order = await c.env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
+  const order = await c.env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first<{ customer_phone: string }>();
   if (!order) notFound('Order not found');
 
   const { results } = await c.env.DB.prepare(
@@ -849,7 +858,26 @@ admin.get('/orders/:id', async (c) => {
     .bind(id)
     .all();
 
-  return c.json({ order, items: results ?? [] });
+  const history = order.customer_phone
+    ? await c.env.DB.prepare(
+        `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
+                SUM(CASE WHEN status IN ('cancelled', 'refunded') THEN 1 ELSE 0 END) AS lost
+           FROM orders WHERE customer_phone = ?`,
+      )
+        .bind(order.customer_phone)
+        .first<{ total: number; delivered: number; lost: number }>()
+    : null;
+
+  return c.json({
+    order: {
+      ...order,
+      customer_total_orders: history?.total ?? 0,
+      customer_delivered_orders: history?.delivered ?? 0,
+      customer_lost_orders: history?.lost ?? 0,
+    },
+    items: results ?? [],
+  });
 });
 
 /** Status changes drive the restock trigger, so this is the only way to move an order. */

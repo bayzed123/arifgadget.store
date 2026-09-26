@@ -3,6 +3,7 @@ import { api, ApiError } from '../../lib/api';
 import {
   COURIER_TONE,
   courierStatus,
+  customerRiskBadge,
   dateTime,
   money,
   number,
@@ -303,6 +304,14 @@ export function Orders() {
                           <span className="tiny dim">
                             {order.customer_phone} · {order.city}
                           </span>
+                          {(() => {
+                            const risk = customerRiskBadge(order);
+                            return risk ? (
+                              <div className={`badge ${risk.tone}`} style={{ marginTop: 4 }}>
+                                <span className="dot" /> {risk.label}
+                              </div>
+                            ) : null;
+                          })()}
                         </td>
                         <td className="num">{number(order.units)}</td>
                         <td className="num">
@@ -548,6 +557,15 @@ function DeliveryCard({ order }: { order: AdminOrder | OrderDetail }) {
       </div>
 
       <p className="delivery-name">{order.customer_name}</p>
+
+      {(() => {
+        const risk = customerRiskBadge(order);
+        return risk ? (
+          <div className={`badge ${risk.tone}`} style={{ marginBottom: 8 }}>
+            <span className="dot" /> {risk.label}
+          </div>
+        ) : null;
+      })()}
 
       {phone ? (
         <p className="delivery-line">

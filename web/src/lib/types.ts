@@ -154,6 +154,11 @@ export interface AdminOrder {
   courier_status?: string;
   courier_cod_amount?: number;
   courier_synced_at?: number | null;
+  /** This phone number's order history across the whole shop, including this order. */
+  customer_total_orders: number;
+  customer_delivered_orders: number;
+  /** Cancelled + returned. */
+  customer_lost_orders: number;
 }
 
 /**

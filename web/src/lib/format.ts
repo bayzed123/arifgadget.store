@@ -79,6 +79,29 @@ export const ORDER_STATUS_TONE: Record<string, 'ok' | 'low' | 'out' | 'info' | '
 };
 
 /**
+ * Turns one phone number's order history into a badge staff can act on before
+ * shipping — the whole point being to catch a repeat-cancel customer before
+ * the courier fee is spent, not after.
+ *
+ * Silent for a customer with one order or fewer: with no second order yet
+ * there is no pattern to report, and a badge on every first-time order would
+ * just be noise.
+ */
+export function customerRiskBadge(order: {
+  customer_total_orders: number;
+  customer_delivered_orders: number;
+  customer_lost_orders: number;
+}): { label: string; tone: 'ok' | 'low' | 'out' } | null {
+  const { customer_total_orders: total, customer_lost_orders: lost } = order;
+  if (total <= 1) return null;
+
+  const lostRate = lost / total;
+  if (lostRate >= 0.5) return { label: `⚠ High risk — ${lost}/${total} cancelled or returned`, tone: 'out' };
+  if (lost > 0) return { label: `${lost}/${total} cancelled or returned before`, tone: 'low' };
+  return { label: `✓ Reliable — ${total} orders delivered`, tone: 'ok' };
+}
+
+/**
  * The five delivery checkpoints in order. `shipped` is stored short but always
  * reads as "On the way" — courier language the shop and the buyer share.
  */
